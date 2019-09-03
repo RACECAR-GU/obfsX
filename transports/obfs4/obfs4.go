@@ -44,11 +44,13 @@ import (
 
 	"git.torproject.org/pluggable-transports/goptlib.git"
 	"gitlab.com/yawning/obfs4.git/common/drbg"
+	"gitlab.com/yawning/obfs4.git/common/log"
 	"gitlab.com/yawning/obfs4.git/common/ntor"
 	"gitlab.com/yawning/obfs4.git/common/probdist"
 	"gitlab.com/yawning/obfs4.git/common/replayfilter"
 	"gitlab.com/yawning/obfs4.git/transports/base"
 	"gitlab.com/yawning/obfs4.git/transports/obfs4/framing"
+	"gitlab.com/yawning/obfs4.git/transports/sharknado"
 )
 
 const (
@@ -265,7 +267,7 @@ func (sf *obfs4ServerFactory) WrapConn(conn net.Conn) (net.Conn, error) {
 		iatDist = probdist.New(sf.iatSeed, 0, maxIATDelay, biasedDist)
 	}
 
-	c := &obfs4Conn{conn, true, lenDist, iatDist, sf.iatMode, bytes.NewBuffer(nil), bytes.NewBuffer(nil), make([]byte, consumeReadSize), nil, nil}
+	c := &obfs4Conn{conn, true, lenDist, iatDist, sf.iatMode, bytes.NewBuffer(nil), bytes.NewBuffer(nil), make([]byte, consumeReadSize), nil, nil, false}
 
 	startTime := time.Now()
 
@@ -292,6 +294,8 @@ type obfs4Conn struct {
 
 	encoder *framing.Encoder
 	decoder *framing.Decoder
+
+	connEstablished bool
 }
 
 func newObfs4ClientConn(conn net.Conn, args *obfs4ClientArgs) (c *obfs4Conn, err error) {
@@ -310,9 +314,17 @@ func newObfs4ClientConn(conn net.Conn, args *obfs4ClientArgs) (c *obfs4Conn, err
 		}
 		iatDist = probdist.New(iatSeed, 0, maxIATDelay, biasedDist)
 	}
+	// All clients that talk to the same obfs4 server should shape their flows
+	// identically, so we derive sharknado's seed from our obfs4 server's
+	// public key.
+	sharknadoSeed, err := drbg.SeedFromBytes(args.publicKey[:drbg.SeedLength])
+	if err != nil {
+		return nil, err
+	}
 
 	// Allocate the client structure.
-	c = &obfs4Conn{conn, false, lenDist, iatDist, args.iatMode, bytes.NewBuffer(nil), bytes.NewBuffer(nil), make([]byte, consumeReadSize), nil, nil}
+	c = &obfs4Conn{conn, false, lenDist, iatDist, args.iatMode, bytes.NewBuffer(nil), bytes.NewBuffer(nil), make([]byte, consumeReadSize), nil, nil, false}
+	c.Conn = sharknado.NewSharknadoConn(conn, c.getDummyTraffic, sharknadoSeed)
 
 	// Start the handshake timeout.
 	deadline := time.Now().Add(clientHandshakeTimeout)
@@ -370,6 +382,7 @@ func (conn *obfs4Conn) clientHandshake(nodeID *ntor.NodeID, peerIdentityKey *nto
 		okm := ntor.Kdf(seed, framing.KeyLength*2)
 		conn.encoder = framing.NewEncoder(okm[:framing.KeyLength])
 		conn.decoder = framing.NewDecoder(okm[framing.KeyLength:])
+		conn.connEstablished = true
 
 		return nil
 	}
@@ -443,6 +456,7 @@ func (conn *obfs4Conn) serverHandshake(sf *obfs4ServerFactory, sessionKey *ntor.
 	if _, err = conn.Conn.Write(frameBuf.Bytes()); err != nil {
 		return err
 	}
+	conn.connEstablished = true
 
 	return nil
 }
@@ -627,6 +641,39 @@ func (conn *obfs4Conn) padBurst(burst *bytes.Buffer, toPadTo int) (err error) {
 	}
 
 	return
+}
+
+// getDummyTraffic must be of type sharknado.DummyTrafficFunc and return `n`
+// bytes of dummy traffic that's ready to be written to the wire.
+func (conn *obfs4Conn) getDummyTraffic(n int) ([]byte, error) {
+
+	// We're still busy with the handshake and haven't determined our shared
+	// secret yet.  We therefore cannot send dummy traffic just yet.
+	if !conn.connEstablished {
+		return nil, fmt.Errorf("Connection not yet established.  No dummy traffic available.")
+	}
+
+	var overhead = framing.FrameOverhead + packetOverhead
+	var frameBuf bytes.Buffer
+	for n > maxPacketPaddingLength {
+		err := conn.makePacket(&frameBuf, packetTypePayload, nil, maxPacketPaddingLength)
+		if err != nil {
+			return nil, err
+		}
+		n -= maxPacketPayloadLength + overhead
+	}
+	// Do we have enough remaining padding to fit it into a new frame?  If not,
+	// let's just create an empty frame.
+	if n < overhead {
+		log.Debugf("Remaining n < frame overhead.")
+		n = overhead
+	}
+	err := conn.makePacket(&frameBuf, packetTypePayload, nil, uint16(n-overhead))
+	if err != nil {
+		return nil, err
+	}
+	log.Debugf("Size of dummy traffic buffer: %d", frameBuf.Len())
+	return frameBuf.Bytes(), nil
 }
 
 func init() {
