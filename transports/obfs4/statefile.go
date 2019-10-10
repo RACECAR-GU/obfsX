@@ -59,6 +59,10 @@ type jsonServerState struct {
 	IATMode    int    `json:"iat-mode"`
 }
 
+type jsonClientState struct {
+	DrbgSeed string `json:"drbg-seed"`
+}
+
 type obfs4ServerCert struct {
 	raw []byte
 }
@@ -106,6 +110,10 @@ type obfs4ServerState struct {
 	cert *obfs4ServerCert
 }
 
+type obfs4ClientState struct {
+	drbgSeed *drbg.Seed
+}
+
 func (st *obfs4ServerState) clientString() string {
 	return fmt.Sprintf("%s=%s %s=%d", certArg, st.cert, iatArg, st.iatMode)
 }
@@ -122,7 +130,7 @@ func serverStateFromArgs(stateDir string, args *pt.Args) (*obfs4ServerState, err
 	// Either a private key, node id, and seed are ALL specified, or
 	// they should be loaded from the state file.
 	if !privKeyOk && !nodeIDOk && !seedOk {
-		if err := jsonServerStateFromFile(stateDir, &js); err != nil {
+		if err := jsonStateFromFile(stateDir, &js); err != nil {
 			return nil, err
 		}
 	} else if !privKeyOk {
@@ -145,6 +153,23 @@ func serverStateFromArgs(stateDir string, args *pt.Args) (*obfs4ServerState, err
 	}
 
 	return serverStateFromJSONServerState(stateDir, &js)
+}
+
+func clientState(stateDir string) (*obfs4ClientState, error) {
+	var err error
+	var js jsonClientState
+
+	if err := jsonStateFromFile(stateDir, &js); err != nil {
+		return nil, err
+	}
+
+	st := new(obfs4ClientState)
+	if st.drbgSeed, err = drbg.SeedFromHex(js.DrbgSeed); err != nil {
+		return nil, err
+	}
+
+	// Write back the possibly updated server state.
+	return st, writeJSONState(stateDir, &js)
 }
 
 func serverStateFromJSONServerState(stateDir string, js *jsonServerState) (*obfs4ServerState, error) {
@@ -172,16 +197,22 @@ func serverStateFromJSONServerState(stateDir string, js *jsonServerState) (*obfs
 	}
 
 	// Write back the possibly updated server state.
-	return st, writeJSONServerState(stateDir, js)
+	return st, writeJSONState(stateDir, js)
 }
 
-func jsonServerStateFromFile(stateDir string, js *jsonServerState) error {
+func jsonStateFromFile(stateDir string, js interface{}) error {
 	fPath := path.Join(stateDir, stateFile)
 	f, err := ioutil.ReadFile(fPath)
 	if err != nil {
 		if os.IsNotExist(err) {
-			if err = newJSONServerState(stateDir, js); err == nil {
-				return nil
+			if cState, ok := js.(*jsonClientState); ok {
+				if err = newJSONClientState(stateDir, cState); err == nil {
+					return nil
+				}
+			} else if sState, ok := js.(*jsonServerState); ok {
+				if err = newJSONServerState(stateDir, sState); err == nil {
+					return nil
+				}
 			}
 		}
 		return err
@@ -192,6 +223,15 @@ func jsonServerStateFromFile(stateDir string, js *jsonServerState) error {
 	}
 
 	return nil
+}
+
+func newJSONClientState(stateDir string, js *jsonClientState) (err error) {
+	var st obfs4ClientState
+	if st.drbgSeed, err = drbg.NewSeed(); err != nil {
+		return
+	}
+	js.DrbgSeed = st.drbgSeed.Hex()
+	return writeJSONState(stateDir, js)
 }
 
 func newJSONServerState(stateDir string, js *jsonServerState) (err error) {
@@ -219,10 +259,10 @@ func newJSONServerState(stateDir string, js *jsonServerState) (err error) {
 	js.DrbgSeed = st.drbgSeed.Hex()
 	js.IATMode = st.iatMode
 
-	return writeJSONServerState(stateDir, js)
+	return writeJSONState(stateDir, js)
 }
 
-func writeJSONServerState(stateDir string, js *jsonServerState) error {
+func writeJSONState(stateDir string, js interface{}) error {
 	var err error
 	var encoded []byte
 	if encoded, err = json.Marshal(js); err != nil {
