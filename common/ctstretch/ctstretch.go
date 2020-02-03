@@ -93,12 +93,12 @@ func SampleBiasedString(numBits uint64, bias float64, stream cipher.Stream) uint
 
 	r := uint64(0)
 
-	for idx := uint64(0); idx < numBits; idx += 1 {
+	for idx := uint64(0); idx < numBits; idx++ {
 		// Simulate a biased coin flip
 		x := float64(UniformSample(0, math.MaxUint64-1, stream)) / float64(math.MaxUint64-1)
 		b := uint64(0)
 		if x >= bias {
-			b += 1
+			b++
 		}
 
 		r ^= (b << idx)
@@ -114,11 +114,11 @@ func SampleBiasedStrings(numBits, n uint64, bias float64, stream cipher.Stream) 
 	for idx := uint64(0); idx < n; idx += 1 {
 
 		s := uint64(0)
-		have_key := true
+		haveKey := true
 
-		for have_key == true {
+		for haveKey == true {
 			s = SampleBiasedString(numBits, bias, stream)
-			_, have_key = m[s]
+			_, haveKey = m[s]
 		}
 
 		vals[idx] = s
@@ -138,18 +138,17 @@ func InvertTable(vals []uint64) map[uint64]uint64 {
 	return m
 }
 
-func BytesToUInt16(data []byte, start_idx, end_idx uint64) uint16 {
-	if end_idx <= start_idx || (end_idx-start_idx) > 3 {
+func BytesToUInt16(data []byte, startIDx, endIDx uint64) uint16 {
+	if endIDx <= startIDx || (endIDx-startIDx) > 3 {
 		panic("ctstretch/bit_manip: invalid range")
 	}
 
-	r := (end_idx - start_idx)
+	r := (endIDx - startIDx)
 
 	if r == 1 {
-		return uint16(data[start_idx])
-	} else { // r == 2
-		return binary.BigEndian.Uint16(data[start_idx:end_idx])
+		return uint16(data[startIDx])
 	}
+	return binary.BigEndian.Uint16(data[startIDx:endIDx])
 }
 
 func ExpandBytes(src, dst []byte, inputBlockBits, outputBlockBits uint64, table16, table8 []uint64, stream cipher.Stream) {
@@ -204,23 +203,23 @@ func ExpandBytes(src, dst []byte, inputBlockBits, outputBlockBits uint64, table1
 
 	for ; inputIdx < uint64(srcNBytes); inputIdx = inputIdx + inputBlockBytes {
 		x := BytesToUInt16(src, inputIdx, inputIdx+inputBlockBytes)
-		table_val := (*table)[x]
+		tableVal := (*table)[x]
 		// yuck :( no variable length casts in go.
 		switch outputBlockBytes {
 		case 2:
-			copy(dst[outputIdx:outputIdx+outputBlockBytes], (*[2]byte)(unsafe.Pointer(&table_val))[:])
+			copy(dst[outputIdx:outputIdx+outputBlockBytes], (*[2]byte)(unsafe.Pointer(&tableVal))[:])
 		case 3:
-			copy(dst[outputIdx:outputIdx+outputBlockBytes], (*[3]byte)(unsafe.Pointer(&table_val))[:])
+			copy(dst[outputIdx:outputIdx+outputBlockBytes], (*[3]byte)(unsafe.Pointer(&tableVal))[:])
 		case 4:
-			copy(dst[outputIdx:outputIdx+outputBlockBytes], (*[4]byte)(unsafe.Pointer(&table_val))[:])
+			copy(dst[outputIdx:outputIdx+outputBlockBytes], (*[4]byte)(unsafe.Pointer(&tableVal))[:])
 		case 5:
-			copy(dst[outputIdx:outputIdx+outputBlockBytes], (*[5]byte)(unsafe.Pointer(&table_val))[:])
+			copy(dst[outputIdx:outputIdx+outputBlockBytes], (*[5]byte)(unsafe.Pointer(&tableVal))[:])
 		case 6:
-			copy(dst[outputIdx:outputIdx+outputBlockBytes], (*[6]byte)(unsafe.Pointer(&table_val))[:])
+			copy(dst[outputIdx:outputIdx+outputBlockBytes], (*[6]byte)(unsafe.Pointer(&tableVal))[:])
 		case 7:
-			copy(dst[outputIdx:outputIdx+outputBlockBytes], (*[7]byte)(unsafe.Pointer(&table_val))[:])
+			copy(dst[outputIdx:outputIdx+outputBlockBytes], (*[7]byte)(unsafe.Pointer(&tableVal))[:])
 		case 8:
-			copy(dst[outputIdx:outputIdx+outputBlockBytes], (*[8]byte)(unsafe.Pointer(&table_val))[:])
+			copy(dst[outputIdx:outputIdx+outputBlockBytes], (*[8]byte)(unsafe.Pointer(&tableVal))[:])
 		}
 
 		BitShuffle(dst[outputIdx:outputIdx+outputBlockBytes], stream, false)
@@ -229,7 +228,7 @@ func ExpandBytes(src, dst []byte, inputBlockBits, outputBlockBits uint64, table1
 }
 
 func CompressBytes(src, dst []byte, inputBlockBits, outputBlockBits uint64, inversion16, inversion8 map[uint64]uint64, stream cipher.Stream) {
-	if inputBlockBits%8 != 0 || outputBlockBits > 64 {
+	if inputBlockBits%8 != 0 || inputBlockBits > 64 {
 		panic("ctstretch/bit_manip: input block size must be a multiple of 8 and less than 64")
 	}
 	if outputBlockBits != 8 && outputBlockBits != 16 {
@@ -244,15 +243,15 @@ func CompressBytes(src, dst []byte, inputBlockBits, outputBlockBits uint64, inve
 	inputBlockBytes := inputBlockBits / 8
 	outputBlockBytes := outputBlockBits / 8
 
-	half_block := (uint64(srcNBytes) % inputBlockBytes) != 0
+	halfBlock := (uint64(srcNBytes) % inputBlockBytes) != 0
 	blocks := uint64(srcNBytes) / inputBlockBytes
 
-	if blocks == 0 && half_block {
+	if blocks == 0 && halfBlock {
 		CompressBytes(src, dst, inputBlockBits/2, outputBlockBits/2, inversion16, inversion8, stream)
 		return
 	}
 
-	if blocks >= 1 && half_block {
+	if blocks >= 1 && halfBlock {
 		endSrc := blocks * inputBlockBytes
 		endDst := blocks * outputBlockBytes
 		CompressBytes(src[0:endSrc], dst[0:endDst], inputBlockBits, outputBlockBits, inversion16, inversion8, stream)

@@ -51,6 +51,7 @@ import (
 	"gitlab.com/yawning/obfs4.git/transports/base"
 	"gitlab.com/yawning/obfs4.git/transports/obfs4/framing"
 	"gitlab.com/yawning/obfs4.git/transports/sharknado"
+	"gitlab.com/yawning/obfs4.git/transports/riverrun"
 )
 
 const (
@@ -267,7 +268,12 @@ func (sf *obfs4ServerFactory) WrapConn(conn net.Conn) (net.Conn, error) {
 		iatDist = probdist.New(sf.iatSeed, 0, maxIATDelay, biasedDist)
 	}
 
+	serverSeed, err := drbg.SeedFromBytes(args.publicKey[:drbg.SeedLength])
+	if err != nil {
+		return nil, err
+	}
 	c := &obfs4Conn{conn, true, lenDist, iatDist, sf.iatMode, bytes.NewBuffer(nil), bytes.NewBuffer(nil), make([]byte, consumeReadSize), nil, nil, false}
+	c.Conn = riverrun.NewRiverrunConn(c.Conn, serverSeed)
 
 	startTime := time.Now()
 
@@ -315,16 +321,17 @@ func newObfs4ClientConn(conn net.Conn, args *obfs4ClientArgs) (c *obfs4Conn, err
 		iatDist = probdist.New(iatSeed, 0, maxIATDelay, biasedDist)
 	}
 	// All clients that talk to the same obfs4 server should shape their flows
-	// identically, so we derive sharknado's seed from our obfs4 server's
+	// identically, so we derive riverrun/sharknado's seed from our obfs4 server's
 	// public key.
-	sharknadoSeed, err := drbg.SeedFromBytes(args.publicKey[:drbg.SeedLength])
+	serverSeed, err := drbg.SeedFromBytes(args.publicKey[:drbg.SeedLength])
 	if err != nil {
 		return nil, err
 	}
 
 	// Allocate the client structure.
 	c = &obfs4Conn{conn, false, lenDist, iatDist, args.iatMode, bytes.NewBuffer(nil), bytes.NewBuffer(nil), make([]byte, consumeReadSize), nil, nil, false}
-	c.Conn = sharknado.NewSharknadoConn(conn, c.getDummyTraffic, sharknadoSeed)
+	c.Conn = riverrun.NewRiverrunConn(c.Conn, serverSeed)
+	c.Conn = sharknado.NewSharknadoConn(c.Conn, c.getDummyTraffic, serverSeed)
 
 	// Start the handshake timeout.
 	deadline := time.Now().Add(clientHandshakeTimeout)

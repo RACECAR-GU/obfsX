@@ -1,4 +1,4 @@
-package main
+package ctstretch
 
 import (
 	"bytes"
@@ -6,7 +6,6 @@ import (
 	"crypto/cipher"
 	"crypto/rand"
 	"fmt"
-	"github.com/rwails/ctstretch"
 )
 
 func main() {
