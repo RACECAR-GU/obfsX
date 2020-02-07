@@ -1,11 +1,12 @@
 package riverrun
 
 import (
-  "bytes"
   "net"
   "crypto/aes"
   "crypto/cipher"
   "math/rand"
+  "gitlab.com/yawning/obfs4.git/common/drbg"
+  "gitlab.com/yawning/obfs4.git/common/log"
   "gitlab.com/yawning/obfs4.git/common/ctstretch"
 )
 
@@ -18,8 +19,8 @@ type RiverrunConn struct {
 
   stream cipher.Stream
 
-  table8 map[uint64]uint64
-  table16 map[uint64]uint64
+  table8 []uint64
+  table16 []uint64
   revTable8 map[uint64]uint64
   revTable16 map[uint64]uint64
 
@@ -50,34 +51,38 @@ func NewRiverrunConn(conn net.Conn, seed *drbg.Seed) *RiverrunConn {
   //        there may be a more optimal selection methedology/initial subset
   compressedBlockBits := uint64((rng.Intn(2)+1) * 8)
 
+  var expandedBlockBits uint64
   var expandedBlockBits8 uint64
 	if compressedBlockBits == 8 {
-		expandedBlockBits8 = uint64((rng.Intn(7)+2) * 8)
+		expandedBlockBits = uint64((rng.Intn(7)+2) * 8)
+    expandedBlockBits8 = compressedBlockBits
 	} else {
-		expandedBlockBits8 = uint64((rng.Intn(3)+2) * 16)
+		expandedBlockBits = uint64((rng.Intn(3)+2) * 16)
+    expandedBlockBits8 = compressedBlockBits / 2
 	}
 
   table8 := ctstretch.SampleBiasedStrings(expandedBlockBits8, 256, bias, stream)
   table16 := ctstretch.SampleBiasedStrings(expandedBlockBits, 65536, bias, stream)
 
   rr := &RiverrunConn{conn, bias, stream, table8, table16, ctstretch.InvertTable(table8), ctstretch.InvertTable(table16), compressedBlockBits, expandedBlockBits}
+  return rr
 }
 
 func (rr *RiverrunConn) Write(b []byte) (int, error) {
-  expandedNBytes := ctstretch.ExpandedNBytes(len(b), rr.compressedBlockBits, rr.expandedBlockBits)
+  expandedNBytes := ctstretch.ExpandedNBytes(uint64(len(b)), rr.compressedBlockBits, rr.expandedBlockBits)
 
   expanded := make([]byte, expandedNBytes)
-  ctstretch.ExpandBytes(b[:], expanded, rr.compressedBlockBits, rr.expandedBlockBits, rr.table16, rr.table8, rr.streamClient)
+  ctstretch.ExpandBytes(b[:], expanded, rr.compressedBlockBits, rr.expandedBlockBits, rr.table16, rr.table8, rr.stream)
   n, err := rr.Conn.Write(expanded)
   log.Debugf("%d ->", n)
   return n, err
 }
 
 func (rr *RiverrunConn) Read(b []byte) (int, error) {
-  compressedNBytes := ctstretch.CompressedNBytes(len(b), rr.expandedBlockBits, rr.compressedBlockBits)
+  compressedNBytes := ctstretch.CompressedNBytes(uint64(len(b)), rr.expandedBlockBits, rr.compressedBlockBits)
   compressed := make([]byte, compressedNBytes)
 
-  ctstretch.CompressBytes(b, compressed, rr.expandedBlockBits, rr.compressedBlockBits, rr.revTable16, rr.revTable8, rr.streamServer)
+  ctstretch.CompressBytes(b, compressed, rr.expandedBlockBits, rr.compressedBlockBits, rr.revTable16, rr.revTable8, rr.stream)
   n, err := rr.Conn.Read(compressed)
   log.Debugf("<- %d", n)
   return n, err

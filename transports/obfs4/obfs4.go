@@ -154,17 +154,14 @@ func (cf *obfs4ClientFactory) Transport() base.Transport {
 	return cf.transport
 }
 
-func (cf *obfs4ClientFactory) ParseArgs(args *pt.Args) (interface{}, error) {
-	var nodeID *ntor.NodeID
-	var publicKey *ntor.PublicKey
-
+func parseCert(args *pt.Args) (nodeID *ntor.NodeID, publicKey *ntor.PublicKey, err error) {
 	// The "new" (version >= 0.0.3) bridge lines use a unified "cert" argument
 	// for the Node ID and Public Key.
 	certStr, ok := args.Get(certArg)
 	if ok {
 		cert, err := serverCertFromString(certStr)
 		if err != nil {
-			return nil, err
+			return nil, nil, err
 		}
 		nodeID, publicKey = cert.unpack()
 	} else {
@@ -172,20 +169,28 @@ func (cf *obfs4ClientFactory) ParseArgs(args *pt.Args) (interface{}, error) {
 		// and Public Key arguments in Base16 encoding and are a UX disaster.
 		nodeIDStr, ok := args.Get(nodeIDArg)
 		if !ok {
-			return nil, fmt.Errorf("missing argument '%s'", nodeIDArg)
+			return nil, nil, fmt.Errorf("missing argument '%s'", nodeIDArg)
 		}
 		var err error
 		if nodeID, err = ntor.NodeIDFromHex(nodeIDStr); err != nil {
-			return nil, err
+			return nil, nil, err
 		}
 
 		publicKeyStr, ok := args.Get(publicKeyArg)
 		if !ok {
-			return nil, fmt.Errorf("missing argument '%s'", publicKeyArg)
+			return nil, nil, fmt.Errorf("missing argument '%s'", publicKeyArg)
 		}
 		if publicKey, err = ntor.PublicKeyFromHex(publicKeyStr); err != nil {
-			return nil, err
+			return nil, nil, err
 		}
+	}
+	return nodeID, publicKey, nil
+}
+
+func (cf *obfs4ClientFactory) ParseArgs(args *pt.Args) (interface{}, error) {
+	nodeID, publicKey, err := parseCert(args)
+	if err != nil {
+		return nil, err
 	}
 
 	// IAT config is common across the two bridge line formats.
@@ -268,7 +273,11 @@ func (sf *obfs4ServerFactory) WrapConn(conn net.Conn) (net.Conn, error) {
 		iatDist = probdist.New(sf.iatSeed, 0, maxIATDelay, biasedDist)
 	}
 
-	serverSeed, err := drbg.SeedFromBytes(args.publicKey[:drbg.SeedLength])
+	_, publicKey, err := parseCert(sf.args)
+	if err != nil {
+		return nil, err
+	}
+	serverSeed, err := drbg.SeedFromBytes(publicKey[:drbg.SeedLength])
 	if err != nil {
 		return nil, err
 	}
