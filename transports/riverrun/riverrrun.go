@@ -74,7 +74,7 @@ func (rr *RiverrunConn) Write(b []byte) (int, error) {
   expanded := make([]byte, expandedNBytes)
   ctstretch.ExpandBytes(b[:], expanded, rr.compressedBlockBits, rr.expandedBlockBits, rr.table16, rr.table8, rr.stream)
   n, err := rr.Conn.Write(expanded)
-  log.Debugf("%d ->", n)
+  log.Debugf("Riverrun: %d ->", n)
   return n, err
 }
 
@@ -84,6 +84,6 @@ func (rr *RiverrunConn) Read(b []byte) (int, error) {
 
   ctstretch.CompressBytes(b, compressed, rr.expandedBlockBits, rr.compressedBlockBits, rr.revTable16, rr.revTable8, rr.stream)
   n, err := rr.Conn.Read(compressed)
-  log.Debugf("<- %d", n)
+  log.Debugf("Riverrun: <- %d", n)
   return n, err
 }
