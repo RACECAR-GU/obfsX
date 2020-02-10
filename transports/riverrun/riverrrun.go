@@ -69,21 +69,29 @@ func NewRiverrunConn(conn net.Conn, seed *drbg.Seed) *RiverrunConn {
 }
 
 func (rr *RiverrunConn) Write(b []byte) (int, error) {
+  log.Debugf("Riverrun: Initiating write")
+  log.Debugf("Riverrun: Initial len of b: %d", len(b))
   expandedNBytes := ctstretch.ExpandedNBytes(uint64(len(b)), rr.compressedBlockBits, rr.expandedBlockBits)
+  log.Debugf("Riverrun: Expanded len of b: %d", expandedNBytes)
 
   expanded := make([]byte, expandedNBytes)
   ctstretch.ExpandBytes(b[:], expanded, rr.compressedBlockBits, rr.expandedBlockBits, rr.table16, rr.table8, rr.stream)
   n, err := rr.Conn.Write(expanded)
   log.Debugf("Riverrun: %d ->", n)
+  log.Debugf("Riverrun: write complete")
   return n, err
 }
 
 func (rr *RiverrunConn) Read(b []byte) (int, error) {
+  log.Debugf("Riverrun: Initiating read")
+  log.Debugf("Riverrun: Initial len of b: %d", len(b))
   compressedNBytes := ctstretch.CompressedNBytes(uint64(len(b)), rr.expandedBlockBits, rr.compressedBlockBits)
   compressed := make([]byte, compressedNBytes)
 
   ctstretch.CompressBytes(b, compressed, rr.expandedBlockBits, rr.compressedBlockBits, rr.revTable16, rr.revTable8, rr.stream)
   n, err := rr.Conn.Read(compressed)
+  log.Debugf("Riverrun: Final len of b: %d", len(b))
   log.Debugf("Riverrun: <- %d", n)
+  log.Debugf("Riverrun: read complete")
   return n, err
 }
