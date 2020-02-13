@@ -87,9 +87,11 @@ func (rr *RiverrunConn) Read(b []byte) (int, error) {
   n, err := rr.Conn.Read(b)
   log.Debugf("Riverrun: Initial len of b: %d", n)
   compressedNBytes := ctstretch.CompressedNBytes(uint64(n), rr.expandedBlockBits, rr.compressedBlockBits)
+  log.Debugf("Riverrun: Calculated compressed size")
   compressed := make([]byte, compressedNBytes)
-
+  log.Debugf("Riverrun: Made compressed array")
   ctstretch.CompressBytes(b, compressed, rr.expandedBlockBits, rr.compressedBlockBits, rr.revTable16, rr.revTable8, rr.stream)
+  log.Debugf("Riverrun: Compressed bytes")
   copy(b[:compressedNBytes], compressed[:])
   log.Debugf("Riverrun: Final len of b: %d", compressedNBytes)
   log.Debugf("Riverrun: <- %d", n)
