@@ -91,7 +91,7 @@ func (rr *RiverrunConn) Read(b []byte) (int, error) {
 
   ctstretch.CompressBytes(b, compressed, rr.expandedBlockBits, rr.compressedBlockBits, rr.revTable16, rr.revTable8, rr.stream)
   copy(b[:compressedNBytes], compressed[:])
-  log.Debugf("Riverrun: Final len of b: %d", len(b))
+  log.Debugf("Riverrun: Final len of b: %d", compressedNBytes)
   log.Debugf("Riverrun: <- %d", n)
   log.Debugf("Riverrun: read complete")
   return int(compressedNBytes), err
