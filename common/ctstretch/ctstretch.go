@@ -37,7 +37,7 @@ func BitSwap(data []byte, i, j uint64) error {
 
 func UniformSample(a, b uint64, stream cipher.Stream) (uint64, error) {
 	if a >= b {
-		return nil, fmt.Errorf("ctstretch/bit_manip: invalid range")
+		return uint64(0), fmt.Errorf("ctstretch/bit_manip: invalid range")
 	}
 
 	rnge := (b - a + 1)
@@ -60,7 +60,7 @@ func BitShuffle(data []byte, rng cipher.Stream, rev bool) error {
 	numBits := uint64(len(data) * 8)
 
 	shuffleIndices := make([]uint64, numBits-1)
-
+	err := nil
 	for idx := uint64(0); idx < (numBits - 1); idx = idx + 1 {
 		shuffleIndices[idx], err = UniformSample(idx, numBits-1, rng)
 		if err != nil {
@@ -79,7 +79,7 @@ func BitShuffle(data []byte, rng cipher.Stream, rev bool) error {
 		}
 
 		jdx := shuffleIndices[kdx]
-		err := BitSwap(data, kdx, jdx)
+		err = BitSwap(data, kdx, jdx)
 		if err != nil {
 			return err
 		}
@@ -97,7 +97,7 @@ func PrintBits(data []byte) {
 func SampleBiasedString(numBits uint64, bias float64, stream cipher.Stream) (uint64, error) {
 
 	if numBits > 64 {
-		return nil, fmt.Errorf("ctstretch/bit_manip: numBits out of range")
+		return uint64(0), fmt.Errorf("ctstretch/bit_manip: numBits out of range")
 	}
 
 	r := uint64(0)
@@ -120,17 +120,20 @@ func SampleBiasedString(numBits uint64, bias float64, stream cipher.Stream) (uin
 	return r, nil
 }
 
-func SampleBiasedStrings(numBits, n uint64, bias float64, stream cipher.Stream) []uint64 {
+func SampleBiasedStrings(numBits, n uint64, bias float64, stream cipher.Stream) ([]uint64, error) {
 	vals := make([]uint64, n)
 	m := make(map[uint64]bool)
-
+	err := nil
 	for idx := uint64(0); idx < n; idx += 1 {
 
 		s := uint64(0)
 		haveKey := true
 
 		for haveKey == true {
-			s = SampleBiasedString(numBits, bias, stream)
+			s, err = SampleBiasedString(numBits, bias, stream)
+			if err != nil {
+				return vals, err
+			}
 			_, haveKey = m[s]
 		}
 
@@ -138,7 +141,7 @@ func SampleBiasedStrings(numBits, n uint64, bias float64, stream cipher.Stream) 
 		m[s] = true
 	}
 
-	return vals
+	return vals, nil
 }
 
 func InvertTable(vals []uint64) map[uint64]uint64 {
@@ -153,7 +156,7 @@ func InvertTable(vals []uint64) map[uint64]uint64 {
 
 func BytesToUInt16(data []byte, startIDx, endIDx uint64) (uint16, error) {
 	if endIDx <= startIDx || (endIDx-startIDx) > 3 {
-		return nil, fmt.Errorf("ctstretch/bit_manip: invalid range")
+		return uint16(0), fmt.Errorf("ctstretch/bit_manip: invalid range")
 	}
 
 	r := (endIDx - startIDx)
@@ -240,7 +243,7 @@ func ExpandBytes(src, dst []byte, inputBlockBits, outputBlockBits uint64, table1
 			copy(dst[outputIdx:outputIdx+outputBlockBytes], (*[8]byte)(unsafe.Pointer(&tableVal))[:])
 		}
 
-		err := BitShuffle(dst[outputIdx:outputIdx+outputBlockBytes], stream, false)
+		err = BitShuffle(dst[outputIdx:outputIdx+outputBlockBytes], stream, false)
 		if err != nil {
 			return err
 		}
