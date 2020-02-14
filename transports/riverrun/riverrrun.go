@@ -77,7 +77,7 @@ func NewRiverrunConn(conn net.Conn, seed *drbg.Seed) (*RiverrunConn, error) {
 	}
 
   rr := &RiverrunConn{conn, bias, stream, table8, table16, ctstretch.InvertTable(table8), ctstretch.InvertTable(table16), compressedBlockBits, expandedBlockBits}
-  return rr
+  return rr, nil
 }
 
 func (rr *RiverrunConn) Write(b []byte) (int, error) {
