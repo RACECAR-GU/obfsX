@@ -287,11 +287,9 @@ func CompressBytes(src, dst []byte, inputBlockBits, outputBlockBits uint64, inve
 		return CompressBytes(src[endSrc:], dst[endDst:], inputBlockBits/2, outputBlockBits/2, inversion16, inversion8, stream)
 	}
 
-	/*
-		if float64(dstNBytes)/float64(srcNBytes) < compressionFactor {
-			panic("ctstretch/bit_manip: dst has insufficient size")
-		}
-	*/
+	if float64(dstNBytes)/float64(srcNBytes) < compressionFactor {
+		return fmt.Errorf("ctstretch/bit_manip: dst has insufficient size")
+	}
 	inputIdx := uint64(0)
 	outputIdx := uint64(0)
 
