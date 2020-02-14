@@ -263,11 +263,12 @@ func CompressBytes(src, dst []byte, inputBlockBits, outputBlockBits uint64, inve
 		return fmt.Errorf("ctstretch/bit_manip: output bit block size must be 8 or 16")
 	}
 
-	//compressionFactor := float64(outputBlockBits) / float64(inputBlockBits)
 	log.Debugf("Riverrun: 2")
 	srcNBytes := len(src)
+	if float64(len(dst))/float64(srcNBytes) < float64(outputBlockBits) / float64(inputBlockBits) {
+		return fmt.Errorf("ctstretch/bit_manip: dst has insufficient size")
+	}
 
-	// dstNBytes := len(dst)
 	inputBlockBytes := inputBlockBits / 8
 	outputBlockBytes := outputBlockBits / 8
 
@@ -287,9 +288,6 @@ func CompressBytes(src, dst []byte, inputBlockBits, outputBlockBits uint64, inve
 		return CompressBytes(src[endSrc:], dst[endDst:], inputBlockBits/2, outputBlockBits/2, inversion16, inversion8, stream)
 	}
 
-	if float64(dstNBytes)/float64(srcNBytes) < compressionFactor {
-		return fmt.Errorf("ctstretch/bit_manip: dst has insufficient size")
-	}
 	inputIdx := uint64(0)
 	outputIdx := uint64(0)
 
@@ -320,6 +318,7 @@ func CompressBytes(src, dst []byte, inputBlockBits, outputBlockBits uint64, inve
 		}
 		outputIdx += outputBlockBytes
 	}
+	log.Debugf("Done!")
 	return nil
 }
 
