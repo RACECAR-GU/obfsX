@@ -100,7 +100,6 @@ func (rr *RiverrunConn) Write(b []byte) (int, error) {
 }
 
 func (rr *RiverrunConn) Read(b []byte) (int, error) {
-  log.Debugf("Riverrun: Initiating read")
   n, err := rr.Conn.Read(b)
   if err != nil {
     return n, err
