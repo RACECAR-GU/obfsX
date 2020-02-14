@@ -273,14 +273,11 @@ func CompressBytes(src, dst []byte, inputBlockBits, outputBlockBits uint64, inve
 
 	halfBlock := (uint64(srcNBytes) % inputBlockBytes) != 0
 	blocks := uint64(srcNBytes) / inputBlockBytes
-	log.Debugf("Riverrun: 3")
 	if blocks == 0 && halfBlock {
-		log.Debugf("Riverrun: 3d")
 		return CompressBytes(src, dst, inputBlockBits/2, outputBlockBits/2, inversion16, inversion8, stream)
 	}
 
 	if blocks >= 1 && halfBlock {
-		log.Debugf("Riverrun: 3d2")
 		endSrc := blocks * inputBlockBytes
 		endDst := blocks * outputBlockBytes
 		err := CompressBytes(src[0:endSrc], dst[0:endDst], inputBlockBits, outputBlockBits, inversion16, inversion8, stream)
@@ -295,7 +292,6 @@ func CompressBytes(src, dst []byte, inputBlockBits, outputBlockBits uint64, inve
 			panic("ctstretch/bit_manip: dst has insufficient size")
 		}
 	*/
-	log.Debugf("Riverrun: 4")
 	inputIdx := uint64(0)
 	outputIdx := uint64(0)
 
@@ -307,9 +303,7 @@ func CompressBytes(src, dst []byte, inputBlockBits, outputBlockBits uint64, inve
 	}
 	log.Debugf("Riverrun: 5")
 	for ; inputIdx < uint64(srcNBytes); inputIdx = inputIdx + inputBlockBytes {
-		log.Debugf("Riverrun: 5a")
 		err := BitShuffle(src[inputIdx:inputIdx+inputBlockBytes], stream, true)
-		log.Debugf("Riverrun: 5b")
 		if err != nil {
 			return err
 		}
@@ -317,15 +311,15 @@ func CompressBytes(src, dst []byte, inputBlockBits, outputBlockBits uint64, inve
 		var x, y uint64
 		x = 0
 		y = 0
-		log.Debugf("Riverrun: 5w")
 		copy((*[unsafe.Sizeof(x)]byte)(unsafe.Pointer(&x))[:],
 			src[inputIdx:inputIdx+inputBlockBytes])
-		log.Debugf("Riverrun: 5x")
 		y = (*inversion)[x]
 		log.Debugf("Riverrun: 5y")
 		if outputBlockBytes == 1 {
+			log.Debugf("Riverrun: as")
 			dst[outputIdx] = uint8(y)
 		} else {
+			log.Debugf("Riverrun: ay")
 			binary.BigEndian.PutUint16(dst[outputIdx:outputIdx+outputBlockBytes], uint16(y))
 		}
 		log.Debugf("Riverrun: 5z")
