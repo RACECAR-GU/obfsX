@@ -301,7 +301,6 @@ func CompressBytes(src, dst []byte, inputBlockBits, outputBlockBits uint64, inve
 	} else {
 		inversion = &inversion16
 	}
-	log.Debugf("Riverrun: 5")
 	for ; inputIdx < uint64(srcNBytes); inputIdx = inputIdx + inputBlockBytes {
 		err := BitShuffle(src[inputIdx:inputIdx+inputBlockBytes], stream, true)
 		if err != nil {
@@ -314,21 +313,15 @@ func CompressBytes(src, dst []byte, inputBlockBits, outputBlockBits uint64, inve
 		copy((*[unsafe.Sizeof(x)]byte)(unsafe.Pointer(&x))[:],
 			src[inputIdx:inputIdx+inputBlockBytes])
 		y = (*inversion)[x]
-		log.Debugf("Riverrun: 5y")
 		if outputBlockBytes == 1 {
-			log.Debugf("Riverrun: as")
 			z := uint8(y)
-			log.Debugf("Riverrun: ass")
 			log.Debugf(string(z), outputIdx, len(dst), srcNBytes, inputIdx, inputBlockBytes)
 			dst[outputIdx] = z
 		} else {
-			log.Debugf("Riverrun: ay")
 			binary.BigEndian.PutUint16(dst[outputIdx:outputIdx+outputBlockBytes], uint16(y))
 		}
-		log.Debugf("Riverrun: 5z")
 		outputIdx += outputBlockBytes
 	}
-	log.Debugf("Riverrun: 6")
 	return nil
 }
 
