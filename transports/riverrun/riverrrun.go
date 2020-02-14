@@ -10,12 +10,6 @@ import (
   "gitlab.com/yawning/obfs4.git/common/ctstretch"
 )
 
-const (
-	// MaximumSegmentLength is the length of the largest possible segment
-	// including IP/TCP overhead.
-	MaximumSegmentLength = 1500 - (20 + 32)
-)
-
 // Implements the net.Conn interface
 type RiverrunConn struct {
   // Embeds a net.Conn and inherits its members.
@@ -23,7 +17,8 @@ type RiverrunConn struct {
 
   bias float64
 
-  stream cipher.Stream
+  readStream cipher.Stream
+  writeStream cipher.Stream
 
   table8 []uint64
   table16 []uint64
@@ -34,7 +29,7 @@ type RiverrunConn struct {
   expandedBlockBits uint64
 }
 
-func NewRiverrunConn(conn net.Conn, seed *drbg.Seed) (*RiverrunConn, error) {
+func NewRiverrunConn(conn net.Conn, isServer bool, seed *drbg.Seed) (*RiverrunConn, error) {
   // FIXME: Bias was arbitrarily selected
   bias := float64(0.55)
 
@@ -76,7 +71,17 @@ func NewRiverrunConn(conn net.Conn, seed *drbg.Seed) (*RiverrunConn, error) {
 		return nil, err
 	}
 
-  rr := &RiverrunConn{conn, bias, stream, table8, table16, ctstretch.InvertTable(table8), ctstretch.InvertTable(table16), compressedBlockBits, expandedBlockBits}
+  // XXX: The only distinction between the read and write streams is the iv... is this secure?
+  if isServer {
+    readStream := stream
+    rng.Read(iv)
+    writeStream := cipher.NewCTR(block, iv)
+  } else {
+    writeStream := stream
+    rng.Read(iv)
+    readStream := cipher.NewCTR(block, iv)
+  }
+  rr := &RiverrunConn{conn, bias, readStream, writeStream, table8, table16, ctstretch.InvertTable(table8), ctstretch.InvertTable(table16), compressedBlockBits, expandedBlockBits}
   return rr, nil
 }
 
@@ -87,7 +92,7 @@ func (rr *RiverrunConn) Write(b []byte) (int, error) {
   log.Debugf("Riverrun: Expanded len of b: %d", expandedNBytes)
 
   expanded := make([]byte, expandedNBytes)
-  err := ctstretch.ExpandBytes(b[:], expanded, rr.compressedBlockBits, rr.expandedBlockBits, rr.table16, rr.table8, rr.stream)
+  err := ctstretch.ExpandBytes(b[:], expanded, rr.compressedBlockBits, rr.expandedBlockBits, rr.table16, rr.table8, rr.writeStream)
   if err != nil {
     return 0, nil
   }
@@ -108,7 +113,7 @@ func (rr *RiverrunConn) Read(b []byte) (int, error) {
   log.Debugf("Riverrun: Calculated compressed size")
   compressed := make([]byte, compressedNBytes)
   log.Debugf("Riverrun: Made compressed array")
-  err = ctstretch.CompressBytes(b[:n], compressed, rr.expandedBlockBits, rr.compressedBlockBits, rr.revTable16, rr.revTable8, rr.stream)
+  err = ctstretch.CompressBytes(b[:n], compressed, rr.expandedBlockBits, rr.compressedBlockBits, rr.revTable16, rr.revTable8, rr.readStream)
   if err != nil {
     log.Debugf(err.Error())
     return 0, err

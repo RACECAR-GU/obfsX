@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"math"
 	"unsafe"
-	"gitlab.com/yawning/obfs4.git/common/log"
 )
 
 // Swaps bits i and j in data.  Bit 0 is the first bit of data[0].
@@ -255,7 +254,6 @@ func ExpandBytes(src, dst []byte, inputBlockBits, outputBlockBits uint64, table1
 }
 
 func CompressBytes(src, dst []byte, inputBlockBits, outputBlockBits uint64, inversion16, inversion8 map[uint64]uint64, stream cipher.Stream) error {
-	log.Debugf("Riverrun: 1")
 	if inputBlockBits%8 != 0 || inputBlockBits > 64 {
 		return fmt.Errorf("ctstretch/bit_manip: input block size must be a multiple of 8 and less than 64")
 	}
@@ -263,7 +261,6 @@ func CompressBytes(src, dst []byte, inputBlockBits, outputBlockBits uint64, inve
 		return fmt.Errorf("ctstretch/bit_manip: output bit block size must be 8 or 16")
 	}
 
-	log.Debugf("Riverrun: 2")
 	srcNBytes := len(src)
 	if float64(len(dst))/float64(srcNBytes) < float64(outputBlockBits) / float64(inputBlockBits) {
 		return fmt.Errorf("ctstretch/bit_manip: dst has insufficient size")

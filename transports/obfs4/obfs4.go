@@ -282,7 +282,7 @@ func (sf *obfs4ServerFactory) WrapConn(conn net.Conn) (net.Conn, error) {
 		return nil, err
 	}
 	c := &obfs4Conn{conn, true, lenDist, iatDist, sf.iatMode, bytes.NewBuffer(nil), bytes.NewBuffer(nil), make([]byte, consumeReadSize), nil, nil, false}
-	c.Conn, err = riverrun.NewRiverrunConn(c.Conn, serverSeed)
+	c.Conn, err = riverrun.NewRiverrunConn(c.Conn, c.isServer, serverSeed)
 	if err != nil {
 		return nil, err
 	}
@@ -342,7 +342,7 @@ func newObfs4ClientConn(conn net.Conn, args *obfs4ClientArgs) (c *obfs4Conn, err
 
 	// Allocate the client structure.
 	c = &obfs4Conn{conn, false, lenDist, iatDist, args.iatMode, bytes.NewBuffer(nil), bytes.NewBuffer(nil), make([]byte, consumeReadSize), nil, nil, false}
-	c.Conn, err = riverrun.NewRiverrunConn(c.Conn, serverSeed)
+	c.Conn, err = riverrun.NewRiverrunConn(c.Conn, c.isServer, serverSeed)
 	if err != nil {
 		return nil, err
 	}
