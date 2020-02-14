@@ -319,7 +319,7 @@ func CompressBytes(src, dst []byte, inputBlockBits, outputBlockBits uint64, inve
 			log.Debugf("Riverrun: as")
 			z := uint8(y)
 			log.Debugf("Riverrun: ass")
-			log.Debugf(z, outputIdx, len(dst))
+			log.Debugf(string(z), outputIdx, len(dst))
 			dst[outputIdx] = z
 		} else {
 			log.Debugf("Riverrun: ay")
