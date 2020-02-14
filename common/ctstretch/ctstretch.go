@@ -179,8 +179,7 @@ func ExpandBytes(src, dst []byte, inputBlockBits, outputBlockBits uint64, table1
 	}
 
 	if srcNBytes == 1 && inputBlockBits == 16 {
-		ExpandBytes(src, dst, 8, outputBlockBits/2, table16, table8, stream)
-		return
+		return ExpandBytes(src, dst, 8, outputBlockBits/2, table16, table8, stream)
 	}
 
 	if inputBlockBits == 16 && srcNBytes > 1 && srcNBytes%2 == 1 {
