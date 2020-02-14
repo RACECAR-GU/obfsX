@@ -36,11 +36,12 @@ func BitSwap(data []byte, i, j uint64) error {
 }
 
 func UniformSample(a, b uint64, stream cipher.Stream) (uint64, error) {
+	var rnge uint64
 	if a >= b {
-		return uint64(0), fmt.Errorf("ctstretch/bit_manip: invalid range")
+		return rnge, fmt.Errorf("ctstretch/bit_manip: invalid range")
 	}
 
-	rnge := (b - a + 1)
+	rnge = (b - a + 1)
 
 	var z uint64 = 0
 	var r uint64 = 0
@@ -60,7 +61,7 @@ func BitShuffle(data []byte, rng cipher.Stream, rev bool) error {
 	numBits := uint64(len(data) * 8)
 
 	shuffleIndices := make([]uint64, numBits-1)
-	err := nil
+	var err error
 	for idx := uint64(0); idx < (numBits - 1); idx = idx + 1 {
 		shuffleIndices[idx], err = UniformSample(idx, numBits-1, rng)
 		if err != nil {
@@ -95,12 +96,12 @@ func PrintBits(data []byte) {
 
 // Bias of 0.8 means 80% probability of outputting 0
 func SampleBiasedString(numBits uint64, bias float64, stream cipher.Stream) (uint64, error) {
-
+	var r uint64
 	if numBits > 64 {
-		return uint64(0), fmt.Errorf("ctstretch/bit_manip: numBits out of range")
+		return r, fmt.Errorf("ctstretch/bit_manip: numBits out of range")
 	}
 
-	r := uint64(0)
+	r = uint64(0)
 
 	for idx := uint64(0); idx < numBits; idx++ {
 		// Simulate a biased coin flip
@@ -123,7 +124,7 @@ func SampleBiasedString(numBits uint64, bias float64, stream cipher.Stream) (uin
 func SampleBiasedStrings(numBits, n uint64, bias float64, stream cipher.Stream) ([]uint64, error) {
 	vals := make([]uint64, n)
 	m := make(map[uint64]bool)
-	err := nil
+	var err error
 	for idx := uint64(0); idx < n; idx += 1 {
 
 		s := uint64(0)
@@ -155,11 +156,12 @@ func InvertTable(vals []uint64) map[uint64]uint64 {
 }
 
 func BytesToUInt16(data []byte, startIDx, endIDx uint64) (uint16, error) {
+	var r uint16
 	if endIDx <= startIDx || (endIDx-startIDx) > 3 {
-		return uint16(0), fmt.Errorf("ctstretch/bit_manip: invalid range")
+		return r, fmt.Errorf("ctstretch/bit_manip: invalid range")
 	}
 
-	r := (endIDx - startIDx)
+	r = (endIDx - startIDx)
 
 	if r == 1 {
 		return uint16(data[startIDx]), nil
