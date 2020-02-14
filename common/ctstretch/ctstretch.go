@@ -156,12 +156,12 @@ func InvertTable(vals []uint64) map[uint64]uint64 {
 }
 
 func BytesToUInt16(data []byte, startIDx, endIDx uint64) (uint16, error) {
-	var r uint16
 	if endIDx <= startIDx || (endIDx-startIDx) > 3 {
-		return r, fmt.Errorf("ctstretch/bit_manip: invalid range")
+		var errVal uint16
+		return errVal, fmt.Errorf("ctstretch/bit_manip: invalid range")
 	}
 
-	r = (endIDx - startIDx)
+	r := (endIDx - startIDx)
 
 	if r == 1 {
 		return uint16(data[startIDx]), nil
