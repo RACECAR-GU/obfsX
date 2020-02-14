@@ -10,6 +10,12 @@ import (
   "gitlab.com/yawning/obfs4.git/common/ctstretch"
 )
 
+const (
+	// MaximumSegmentLength is the length of the largest possible segment
+	// including IP/TCP overhead.
+	MaximumSegmentLength = 1500 - (20 + 32)
+)
+
 // Implements the net.Conn interface
 type RiverrunConn struct {
   // Embeds a net.Conn and inherits its members.
@@ -75,7 +81,10 @@ func (rr *RiverrunConn) Write(b []byte) (int, error) {
   log.Debugf("Riverrun: Expanded len of b: %d", expandedNBytes)
 
   expanded := make([]byte, expandedNBytes)
-  ctstretch.ExpandBytes(b[:], expanded, rr.compressedBlockBits, rr.expandedBlockBits, rr.table16, rr.table8, rr.stream)
+  err := ctstretch.ExpandBytes(b[:], expanded, rr.compressedBlockBits, rr.expandedBlockBits, rr.table16, rr.table8, rr.stream)
+  if err != nil {
+    return 0, nil
+  }
   n, err := rr.Conn.Write(expanded)
   log.Debugf("Riverrun: %d ->", n)
   log.Debugf("Riverrun: write complete")
