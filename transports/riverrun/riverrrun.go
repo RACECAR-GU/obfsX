@@ -71,7 +71,7 @@ func NewRiverrunConn(conn net.Conn, isServer bool, seed *drbg.Seed) (*RiverrunCo
 		return nil, err
 	}
 
-  var readStream, writeStream cipher.stream
+  var readStream, writeStream cipher.Stream
   // XXX: The only distinction between the read and write streams is the iv... is this secure?
   if isServer {
     readStream = stream
