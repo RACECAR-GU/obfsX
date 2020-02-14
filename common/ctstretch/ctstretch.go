@@ -311,14 +311,12 @@ func CompressBytes(src, dst []byte, inputBlockBits, outputBlockBits uint64, inve
 		y = (*inversion)[x]
 		if outputBlockBytes == 1 {
 			z := uint8(y)
-			log.Debugf(string(z), outputIdx, len(dst), srcNBytes, inputIdx, inputBlockBytes)
 			dst[outputIdx] = z
 		} else {
 			binary.BigEndian.PutUint16(dst[outputIdx:outputIdx+outputBlockBytes], uint16(y))
 		}
 		outputIdx += outputBlockBytes
 	}
-	log.Debugf("Done!")
 	return nil
 }
 
