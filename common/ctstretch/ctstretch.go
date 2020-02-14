@@ -317,7 +317,9 @@ func CompressBytes(src, dst []byte, inputBlockBits, outputBlockBits uint64, inve
 		log.Debugf("Riverrun: 5y")
 		if outputBlockBytes == 1 {
 			log.Debugf("Riverrun: as")
-			dst[outputIdx] = uint8(y)
+			z := uint8(y)
+			log.Debugf("Riverrun: ass")
+			dst[outputIdx] = z
 		} else {
 			log.Debugf("Riverrun: ay")
 			binary.BigEndian.PutUint16(dst[outputIdx:outputIdx+outputBlockBytes], uint16(y))
