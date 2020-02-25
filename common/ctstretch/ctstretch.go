@@ -9,15 +9,15 @@ import (
 )
 
 // Swaps bits i and j in data.  Bit 0 is the first bit of data[0].
-func BitSwap(data []byte, i, j uint64) {
+func BitSwap(data []byte, i, j uint64) error {
 
 	if i == j {
-		return
+		return nil
 	}
 
 	numBits := uint64(len(data) * 8)
 	if i >= numBits || j >= numBits {
-		panic("ctstretch/bit_manip: index out of bounds")
+		return fmt.Errorf("ctstretch/bit_manip: index out of bounds")
 	}
 
 	var iByte *byte = &data[i/8]
@@ -31,14 +31,16 @@ func BitSwap(data []byte, i, j uint64) {
 
 	*iByte = *iByte ^ (c << iBitIdx)
 	*jByte = *jByte ^ (c << jBitIdx)
+	return nil
 }
 
-func UniformSample(a, b uint64, stream cipher.Stream) uint64 {
+func UniformSample(a, b uint64, stream cipher.Stream) (uint64, error) {
+	var rnge uint64
 	if a >= b {
-		panic("ctstretch/bit_manip: invalid range")
+		return rnge, fmt.Errorf("ctstretch/bit_manip: invalid range")
 	}
 
-	rnge := (b - a + 1)
+	rnge = (b - a + 1)
 
 	var z uint64 = 0
 	var r uint64 = 0
@@ -51,16 +53,19 @@ func UniformSample(a, b uint64, stream cipher.Stream) uint64 {
 		stream.XORKeyStream(rBytes, zBytes)
 	}
 
-	return a + (r % rnge)
+	return a + (r % rnge), nil
 }
 
-func BitShuffle(data []byte, rng cipher.Stream, rev bool) {
+func BitShuffle(data []byte, rng cipher.Stream, rev bool) error {
 	numBits := uint64(len(data) * 8)
 
 	shuffleIndices := make([]uint64, numBits-1)
-
+	var err error
 	for idx := uint64(0); idx < (numBits - 1); idx = idx + 1 {
-		shuffleIndices[idx] = UniformSample(idx, numBits-1, rng)
+		shuffleIndices[idx], err = UniformSample(idx, numBits-1, rng)
+		if err != nil {
+			return err
+		}
 	}
 
 	for idx := uint64(0); idx < (numBits - 1); idx = idx + 1 {
@@ -74,8 +79,12 @@ func BitShuffle(data []byte, rng cipher.Stream, rev bool) {
 		}
 
 		jdx := shuffleIndices[kdx]
-		BitSwap(data, kdx, jdx)
+		err = BitSwap(data, kdx, jdx)
+		if err != nil {
+			return err
+		}
 	}
+	return nil
 }
 
 func PrintBits(data []byte) {
@@ -85,17 +94,21 @@ func PrintBits(data []byte) {
 }
 
 // Bias of 0.8 means 80% probability of outputting 0
-func SampleBiasedString(numBits uint64, bias float64, stream cipher.Stream) uint64 {
-
+func SampleBiasedString(numBits uint64, bias float64, stream cipher.Stream) (uint64, error) {
+	var r uint64
 	if numBits > 64 {
-		panic("ctstretch/bit_manip: numBits out of range")
+		return r, fmt.Errorf("ctstretch/bit_manip: numBits out of range")
 	}
 
-	r := uint64(0)
+	r = uint64(0)
 
 	for idx := uint64(0); idx < numBits; idx++ {
 		// Simulate a biased coin flip
-		x := float64(UniformSample(0, math.MaxUint64-1, stream)) / float64(math.MaxUint64-1)
+		sample, err := UniformSample(0, math.MaxUint64-1, stream)
+		if err != nil {
+			return r, nil
+		}
+		x := float64(sample) / float64(math.MaxUint64-1)
 		b := uint64(0)
 		if x >= bias {
 			b++
@@ -104,20 +117,23 @@ func SampleBiasedString(numBits uint64, bias float64, stream cipher.Stream) uint
 		r ^= (b << idx)
 	}
 
-	return r
+	return r, nil
 }
 
-func SampleBiasedStrings(numBits, n uint64, bias float64, stream cipher.Stream) []uint64 {
+func SampleBiasedStrings(numBits, n uint64, bias float64, stream cipher.Stream) ([]uint64, error) {
 	vals := make([]uint64, n)
 	m := make(map[uint64]bool)
-
+	var err error
 	for idx := uint64(0); idx < n; idx += 1 {
 
 		s := uint64(0)
 		haveKey := true
 
 		for haveKey == true {
-			s = SampleBiasedString(numBits, bias, stream)
+			s, err = SampleBiasedString(numBits, bias, stream)
+			if err != nil {
+				return vals, err
+			}
 			_, haveKey = m[s]
 		}
 
@@ -125,7 +141,7 @@ func SampleBiasedStrings(numBits, n uint64, bias float64, stream cipher.Stream) 
 		m[s] = true
 	}
 
-	return vals
+	return vals, nil
 }
 
 func InvertTable(vals []uint64) map[uint64]uint64 {
@@ -138,25 +154,27 @@ func InvertTable(vals []uint64) map[uint64]uint64 {
 	return m
 }
 
-func BytesToUInt16(data []byte, startIDx, endIDx uint64) uint16 {
+func BytesToUInt16(data []byte, startIDx, endIDx uint64) (uint16, error) {
 	if endIDx <= startIDx || (endIDx-startIDx) > 3 {
-		panic("ctstretch/bit_manip: invalid range")
+		var errVal uint16
+		return errVal, fmt.Errorf("ctstretch/bit_manip: invalid range")
 	}
 
 	r := (endIDx - startIDx)
 
 	if r == 1 {
-		return uint16(data[startIDx])
+		return uint16(data[startIDx]), nil
 	}
-	return binary.BigEndian.Uint16(data[startIDx:endIDx])
+	return binary.BigEndian.Uint16(data[startIDx:endIDx]), nil
 }
 
-func ExpandBytes(src, dst []byte, inputBlockBits, outputBlockBits uint64, table16, table8 []uint64, stream cipher.Stream) {
+func ExpandBytes(src, dst []byte, inputBlockBits, outputBlockBits uint64, table16, table8 []uint64, stream cipher.Stream) error {
+
 	if inputBlockBits != 8 && inputBlockBits != 16 {
-		panic("ctstretch/bit_manip: input bit block size must be 8 or 16")
+		return fmt.Errorf("ctstretch/bit_manip: input bit block size must be 8 or 16")
 	}
 	if outputBlockBits%8 != 0 || outputBlockBits > 64 {
-		panic("ctstretch/bit_manip: output block size must be a multiple of 8 and less than 64")
+		return fmt.Errorf("ctstretch/bit_manip: output block size must be a multiple of 8 and less than 64") // TODO: Change to error
 	}
 
 	srcNBytes := len(src)
@@ -168,18 +186,19 @@ func ExpandBytes(src, dst []byte, inputBlockBits, outputBlockBits uint64, table1
 	//expansionFactor := float64(outputBlockBits) / float64(inputBlockBits)
 
 	if srcNBytes == 0 {
-		return
+		return nil
 	}
 
 	if srcNBytes == 1 && inputBlockBits == 16 {
-		ExpandBytes(src, dst, 8, outputBlockBits/2, table16, table8, stream)
-		return
+		return ExpandBytes(src, dst, 8, outputBlockBits/2, table16, table8, stream)
 	}
 
 	if inputBlockBits == 16 && srcNBytes > 1 && srcNBytes%2 == 1 {
-		ExpandBytes(src[0:srcNBytes-1], dst[0:uint64(srcNBytes-1)*outputBlockBytes/inputBlockBytes], inputBlockBits, outputBlockBits, table16, table8, stream)
-		ExpandBytes(src[srcNBytes-1:], dst[uint64(srcNBytes-1)*outputBlockBytes/inputBlockBytes:], 8, outputBlockBits/2, table16, table8, stream)
-		return
+		err := ExpandBytes(src[0:srcNBytes-1], dst[0:uint64(srcNBytes-1)*outputBlockBytes/inputBlockBytes], inputBlockBits, outputBlockBits, table16, table8, stream)
+		if err != nil {
+			return err
+		}
+		return ExpandBytes(src[srcNBytes-1:], dst[uint64(srcNBytes-1)*outputBlockBytes/inputBlockBytes:], 8, outputBlockBits/2, table16, table8, stream)
 	}
 
 	/*
@@ -202,7 +221,10 @@ func ExpandBytes(src, dst []byte, inputBlockBits, outputBlockBits uint64, table1
 	outputIdx := uint64(0)
 
 	for ; inputIdx < uint64(srcNBytes); inputIdx = inputIdx + inputBlockBytes {
-		x := BytesToUInt16(src, inputIdx, inputIdx+inputBlockBytes)
+		x, err := BytesToUInt16(src, inputIdx, inputIdx+inputBlockBytes)
+		if err != nil {
+			return err
+		}
 		tableVal := (*table)[x]
 		// yuck :( no variable length casts in go.
 		switch outputBlockBytes {
@@ -222,48 +244,46 @@ func ExpandBytes(src, dst []byte, inputBlockBits, outputBlockBits uint64, table1
 			copy(dst[outputIdx:outputIdx+outputBlockBytes], (*[8]byte)(unsafe.Pointer(&tableVal))[:])
 		}
 
-		BitShuffle(dst[outputIdx:outputIdx+outputBlockBytes], stream, false)
+		err = BitShuffle(dst[outputIdx:outputIdx+outputBlockBytes], stream, false)
+		if err != nil {
+			return err
+		}
 		outputIdx += outputBlockBytes
 	}
+	return nil
 }
 
-func CompressBytes(src, dst []byte, inputBlockBits, outputBlockBits uint64, inversion16, inversion8 map[uint64]uint64, stream cipher.Stream) {
+func CompressBytes(src, dst []byte, inputBlockBits, outputBlockBits uint64, inversion16, inversion8 map[uint64]uint64, stream cipher.Stream) error {
 	if inputBlockBits%8 != 0 || inputBlockBits > 64 {
-		panic("ctstretch/bit_manip: input block size must be a multiple of 8 and less than 64")
+		return fmt.Errorf("ctstretch/bit_manip: input block size must be a multiple of 8 and less than 64")
 	}
 	if outputBlockBits != 8 && outputBlockBits != 16 {
-		panic("ctstretch/bit_manip: output bit block size must be 8 or 16")
+		return fmt.Errorf("ctstretch/bit_manip: output bit block size must be 8 or 16")
 	}
 
-	//compressionFactor := float64(outputBlockBits) / float64(inputBlockBits)
-
 	srcNBytes := len(src)
+	if float64(len(dst))/float64(srcNBytes) < float64(outputBlockBits) / float64(inputBlockBits) {
+		return fmt.Errorf("ctstretch/bit_manip: dst has insufficient size")
+	}
 
-	// dstNBytes := len(dst)
 	inputBlockBytes := inputBlockBits / 8
 	outputBlockBytes := outputBlockBits / 8
 
 	halfBlock := (uint64(srcNBytes) % inputBlockBytes) != 0
 	blocks := uint64(srcNBytes) / inputBlockBytes
-
 	if blocks == 0 && halfBlock {
-		CompressBytes(src, dst, inputBlockBits/2, outputBlockBits/2, inversion16, inversion8, stream)
-		return
+		return CompressBytes(src, dst, inputBlockBits/2, outputBlockBits/2, inversion16, inversion8, stream)
 	}
 
 	if blocks >= 1 && halfBlock {
 		endSrc := blocks * inputBlockBytes
 		endDst := blocks * outputBlockBytes
-		CompressBytes(src[0:endSrc], dst[0:endDst], inputBlockBits, outputBlockBits, inversion16, inversion8, stream)
-		CompressBytes(src[endSrc:], dst[endDst:], inputBlockBits/2, outputBlockBits/2, inversion16, inversion8, stream)
-		return
-	}
-
-	/*
-		if float64(dstNBytes)/float64(srcNBytes) < compressionFactor {
-			panic("ctstretch/bit_manip: dst has insufficient size")
+		err := CompressBytes(src[0:endSrc], dst[0:endDst], inputBlockBits, outputBlockBits, inversion16, inversion8, stream)
+		if err != nil {
+			return err
 		}
-	*/
+		return CompressBytes(src[endSrc:], dst[endDst:], inputBlockBits/2, outputBlockBits/2, inversion16, inversion8, stream)
+	}
 
 	inputIdx := uint64(0)
 	outputIdx := uint64(0)
@@ -274,9 +294,11 @@ func CompressBytes(src, dst []byte, inputBlockBits, outputBlockBits uint64, inve
 	} else {
 		inversion = &inversion16
 	}
-
 	for ; inputIdx < uint64(srcNBytes); inputIdx = inputIdx + inputBlockBytes {
-		BitShuffle(src[inputIdx:inputIdx+inputBlockBytes], stream, true)
+		err := BitShuffle(src[inputIdx:inputIdx+inputBlockBytes], stream, true)
+		if err != nil {
+			return err
+		}
 
 		var x, y uint64
 		x = 0
@@ -284,15 +306,15 @@ func CompressBytes(src, dst []byte, inputBlockBits, outputBlockBits uint64, inve
 		copy((*[unsafe.Sizeof(x)]byte)(unsafe.Pointer(&x))[:],
 			src[inputIdx:inputIdx+inputBlockBytes])
 		y = (*inversion)[x]
-
 		if outputBlockBytes == 1 {
-			dst[outputIdx] = uint8(y)
+			z := uint8(y)
+			dst[outputIdx] = z
 		} else {
 			binary.BigEndian.PutUint16(dst[outputIdx:outputIdx+outputBlockBytes], uint16(y))
 		}
-
 		outputIdx += outputBlockBytes
 	}
+	return nil
 }
 
 func ExpandedNBytes(srcLen, inputBlockBits, outputBlockBits uint64) uint64 {

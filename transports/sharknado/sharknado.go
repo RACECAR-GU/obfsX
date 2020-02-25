@@ -131,7 +131,7 @@ func (sn *SharknadoConn) heartbeat(interval int) {
 func (sn *SharknadoConn) Write(b []byte) (int, error) {
 
 	n, err := sn.Conn.Write(b)
-	log.Debugf("%d ->", n)
+	log.Debugf("Sharknado: %d ->", n)
 	return n, err
 }
 
@@ -139,7 +139,7 @@ func (sn *SharknadoConn) Read(b []byte) (int, error) {
 
 	n, err := sn.Conn.Read(b)
 	sn.bytesRcvd += n
-	log.Debugf("<- %d", n)
+	log.Debugf("Sharknado: <- %d", n)
 
 	if sn.shouldBreakBurst() {
 		if _, err2 := sn.sendDummyTraffic(); err2 != nil {
