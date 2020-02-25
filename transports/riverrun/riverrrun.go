@@ -385,7 +385,8 @@ func (conn *RiverrunConn) Read(b []byte) (n int, err error) {
 	// data gets relayed before the connection is torn down.
 	if conn.receiveDecodedBuffer.Len() > 0 {
 		var berr error
-		n, berr = conn.receiveDecodedBuffer.Read(b)
+    b = new([]byte, conn.receiveDecodedBuffer.Len())
+		n, berr = conn.receiveDecodedBuffer.Read(b[:])
 		if err == nil {
 			// Only propagate berr if there are not more important (fatal)
 			// errors from the network/crypto/packet processing.
@@ -408,7 +409,7 @@ func (conn *RiverrunConn) readPackets() (err error) {
 			break
 		}
     log.Debugf("ReadPackets: Decoded length is %d", decLen)
-    err = conn.readPacket(decoded[:decLen])
+    conn.receiveDecodedBuffer.Write(decoded[:decLen])
     if err != nil {
       break
     }
