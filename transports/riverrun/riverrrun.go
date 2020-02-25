@@ -385,7 +385,7 @@ func (conn *RiverrunConn) Read(b []byte) (n int, err error) {
 	// data gets relayed before the connection is torn down.
 	if conn.receiveDecodedBuffer.Len() > 0 {
 		var berr error
-    b = new([]byte, conn.receiveDecodedBuffer.Len())
+    b = make([]byte, conn.receiveDecodedBuffer.Len())
 		n, berr = conn.receiveDecodedBuffer.Read(b[:])
 		if err == nil {
 			// Only propagate berr if there are not more important (fatal)
