@@ -176,7 +176,7 @@ func (decoder *RiverrunDecoder) decode(data []byte, frames *bytes.Buffer) (int, 
   // Decode
   compressedNBytes := ctstretch.CompressedNBytes(uint64(n), decoder.expandedBlockBits, decoder.compressedBlockBits)
   data = make([]byte, compressedNBytes)
-  err = ctstretch.CompressBytes(frame[:n], data[:], decoder.expandedBlockBits, decoder.compressedBlockBits, decoder.revTable16, decoder.revTable8, decoder.stream)
+  err = ctstretch.CompressBytes(frame[:n], data, decoder.expandedBlockBits, decoder.compressedBlockBits, decoder.revTable16, decoder.revTable8, decoder.stream)
   if err != nil {
     return 0, err
   }
@@ -192,7 +192,7 @@ func (decoder *RiverrunDecoder) decode(data []byte, frames *bytes.Buffer) (int, 
 
 func (decoder *RiverrunDecoder) ParseLength(rawLengthBytes []byte) (uint16, error) {
   lengthBytes := make([]byte, framing.LengthLength)
-  err := ctstretch.CompressBytes(rawLengthBytes, lengthBytes, decoder.expandedBlockBits, decoder.compressedBlockBits, decoder.revTable16, decoder.revTable8, decoder.stream)
+  err := ctstretch.CompressBytes(rawLengthBytes[:], lengthBytes[:], decoder.expandedBlockBits, decoder.compressedBlockBits, decoder.revTable16, decoder.revTable8, decoder.stream)
   if err != nil {
     return 0, err
   }
@@ -256,13 +256,13 @@ func (encoder *RiverrunEncoder) Encode(frame, payload []byte, pktType uint8) (n 
 	oLength := length ^ binary.BigEndian.Uint16(encoder.drbg.NextBlock())
   oBytes := make([]byte, 2)
   binary.BigEndian.PutUint16(oBytes, oLength)
-  err = ctstretch.ExpandBytes(oBytes, frame[:encoder.expandedLenNBytes], encoder.compressedBlockBits, encoder.expandedBlockBits, encoder.table16, encoder.table8, encoder.stream)
+  err = ctstretch.ExpandBytes(oBytes[:], frame[:encoder.expandedLenNBytes], encoder.compressedBlockBits, encoder.expandedBlockBits, encoder.table16, encoder.table8, encoder.stream)
   if err != nil {
     return 0, err
   }
 
   // Expand the payload.
-  err = ctstretch.ExpandBytes(payload, frame[encoder.expandedLenNBytes:], encoder.compressedBlockBits, encoder.expandedBlockBits, encoder.table16, encoder.table8, encoder.stream)
+  err = ctstretch.ExpandBytes(payload[:], frame[encoder.expandedLenNBytes:], encoder.compressedBlockBits, encoder.expandedBlockBits, encoder.table16, encoder.table8, encoder.stream)
   if err != nil {
     return 0, err
   }
