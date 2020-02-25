@@ -1,7 +1,6 @@
 package ctstretch
 
 import (
-	"testing"
 	"bytes"
 	"crypto/aes"
 	"crypto/cipher"
@@ -9,7 +8,7 @@ import (
 	"fmt"
 )
 
-func TestStretching(t *testing.T) {
+func main() {
 	key := make([]byte, 16)
 	rand.Read(key)
 
@@ -44,8 +43,8 @@ func TestStretching(t *testing.T) {
 func runTest(msgNBytes, inputBlockBits, outputBlockBits uint64, bias float64,
 	streamClient, streamServer cipher.Stream) {
 
-	clientTable16 := SampleBiasedStrings(outputBlockBits, 65536, bias, streamClient)
-	serverTable16 := InvertTable(SampleBiasedStrings(outputBlockBits, 65536, bias, streamServer))
+	clientTable16 := ctstretch.SampleBiasedStrings(outputBlockBits, 65536, bias, streamClient)
+	serverTable16 := ctstretch.InvertTable(ctstretch.SampleBiasedStrings(outputBlockBits, 65536, bias, streamServer))
 
 	var outputBlockBits8 uint64
 	if inputBlockBits == 8 {
@@ -54,29 +53,24 @@ func runTest(msgNBytes, inputBlockBits, outputBlockBits uint64, bias float64,
 		outputBlockBits8 = outputBlockBits / 2
 	}
 
-	clientTable8 := SampleBiasedStrings(outputBlockBits8, 256, bias, streamClient)
-	serverTable8 := InvertTable(SampleBiasedStrings(outputBlockBits8, 256, bias, streamServer))
+	clientTable8 := ctstretch.SampleBiasedStrings(outputBlockBits8, 256, bias, streamClient)
+	serverTable8 := ctstretch.InvertTable(ctstretch.SampleBiasedStrings(outputBlockBits8, 256, bias, streamServer))
 
 	msg := make([]byte, msgNBytes)
-	expandedNBytes := ExpandedNBytes(msgNBytes, inputBlockBits, outputBlockBits)
-	compressedNBytes := CompressedNBytes(expandedNBytes, outputBlockBits, inputBlockBits)
-	if msgNBytes == compressedNBytes {
-		fmt.Println("Pass sizing:", msgNBytes, expandedNBytes, compressedNBytes)
-	} else {
-		fmt.Println("Fail sizing:", msgNBytes, expandedNBytes, compressedNBytes)
-	}
+	expandedNBytes := ctstretch.ExpandedNBytes(msgNBytes, inputBlockBits, outputBlockBits)
+	compressedNBytes := ctstretch.CompressedNBytes(expandedNBytes, outputBlockBits, inputBlockBits)
 
 	expanded := make([]byte, expandedNBytes)
 	rand.Read(msg)
 	compressed := make([]byte, compressedNBytes)
 
-	ExpandBytes(msg[:], expanded, inputBlockBits, outputBlockBits, clientTable16, clientTable8, streamClient)
-	CompressBytes(expanded, compressed, outputBlockBits, inputBlockBits, serverTable16, serverTable8, streamServer)
+	ctstretch.ExpandBytes(msg[:], expanded, inputBlockBits, outputBlockBits, clientTable16, clientTable8, streamClient)
+	ctstretch.CompressBytes(expanded, compressed, outputBlockBits, inputBlockBits, serverTable16, serverTable8, streamServer)
 
 	if bytes.Equal(msg, compressed) {
-		fmt.Println("Pass translation:", msgNBytes, inputBlockBits, outputBlockBits)
+		fmt.Println("Pass:", msgNBytes, inputBlockBits, outputBlockBits)
 	} else {
 		fmt.Println(msg, compressed)
-		fmt.Println("Fail translation:", msgNBytes, inputBlockBits, outputBlockBits)
+		fmt.Println("Fail:", msgNBytes, inputBlockBits, outputBlockBits)
 	}
 }
