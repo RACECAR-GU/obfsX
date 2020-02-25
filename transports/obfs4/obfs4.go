@@ -52,6 +52,7 @@ import (
 	"gitlab.com/yawning/obfs4.git/transports/obfs4/framing"
 	//"gitlab.com/yawning/obfs4.git/transports/sharknado"
 	"gitlab.com/yawning/obfs4.git/transports/riverrun"
+	f "gitlab.com/yawning/obfs4.git/common/framing"
 )
 
 const (
@@ -267,7 +268,7 @@ func (sf *obfs4ServerFactory) WrapConn(conn net.Conn) (net.Conn, error) {
 		return nil, err
 	}
 
-	lenDist := probdist.New(sf.lenSeed, 0, framing.MaximumSegmentLength, biasedDist)
+	lenDist := probdist.New(sf.lenSeed, 0, f.MaximumSegmentLength, biasedDist)
 	var iatDist *probdist.WeightedDist
 	if sf.iatSeed != nil {
 		iatDist = probdist.New(sf.iatSeed, 0, maxIATDelay, biasedDist)
@@ -281,7 +282,7 @@ func (sf *obfs4ServerFactory) WrapConn(conn net.Conn) (net.Conn, error) {
 	if err != nil {
 		return nil, err
 	}
-	c := &obfs4Conn{conn, true, lenDist, iatDist, sf.iatMode, bytes.NewBuffer(nil), bytes.NewBuffer(nil), make([]byte, consumeReadSize), nil, nil, false}
+	c := &obfs4Conn{conn, true, lenDist, iatDist, sf.iatMode, bytes.NewBuffer(nil), bytes.NewBuffer(nil), make([]byte, f.ConsumeReadSize), nil, nil, false}
 	c.Conn, err = riverrun.NewRiverrunConn(c.Conn, c.isServer, serverSeed)
 	if err != nil {
 		return nil, err
@@ -322,7 +323,7 @@ func newObfs4ClientConn(conn net.Conn, args *obfs4ClientArgs) (c *obfs4Conn, err
 	if seed, err = drbg.NewSeed(); err != nil {
 		return
 	}
-	lenDist := probdist.New(seed, 0, framing.MaximumSegmentLength, biasedDist)
+	lenDist := probdist.New(seed, 0, f.MaximumSegmentLength, biasedDist)
 	var iatDist *probdist.WeightedDist
 	if args.iatMode != iatNone {
 		var iatSeed *drbg.Seed
@@ -341,7 +342,7 @@ func newObfs4ClientConn(conn net.Conn, args *obfs4ClientArgs) (c *obfs4Conn, err
 	}
 
 	// Allocate the client structure.
-	c = &obfs4Conn{conn, false, lenDist, iatDist, args.iatMode, bytes.NewBuffer(nil), bytes.NewBuffer(nil), make([]byte, consumeReadSize), nil, nil, false}
+	c = &obfs4Conn{conn, false, lenDist, iatDist, args.iatMode, bytes.NewBuffer(nil), bytes.NewBuffer(nil), make([]byte, f.ConsumeReadSize), nil, nil, false}
 	c.Conn, err = riverrun.NewRiverrunConn(c.Conn, c.isServer, serverSeed)
 	if err != nil {
 		return nil, err
@@ -489,7 +490,7 @@ func (conn *obfs4Conn) Read(b []byte) (n int, err error) {
 	// so do this in a loop till data is present or an error occurs.
 	for conn.receiveDecodedBuffer.Len() == 0 {
 		err = conn.readPackets()
-		if err == framing.ErrAgain {
+		if err == f.ErrAgain {
 			// Don't proagate this back up the call stack if we happen to break
 			// out of the loop.
 			err = nil
@@ -550,7 +551,7 @@ func (conn *obfs4Conn) Write(b []byte) (n int, err error) {
 	// frameBuf around.  In theory, write timeouts and whatnot could be
 	// supported if this wasn't the case, but that complicates the code.
 	if conn.iatMode != iatNone {
-		var iatFrame [framing.MaximumSegmentLength]byte
+		var iatFrame [f.MaximumSegmentLength]byte
 		for frameBuf.Len() > 0 {
 			iatWrLen := 0
 
@@ -634,13 +635,13 @@ func (conn *obfs4Conn) closeAfterDelay(sf *obfs4ServerFactory, startTime time.Ti
 }
 
 func (conn *obfs4Conn) padBurst(burst *bytes.Buffer, toPadTo int) (err error) {
-	tailLen := burst.Len() % framing.MaximumSegmentLength
+	tailLen := burst.Len() % f.MaximumSegmentLength
 
 	padLen := 0
 	if toPadTo >= tailLen {
 		padLen = toPadTo - tailLen
 	} else {
-		padLen = (framing.MaximumSegmentLength - tailLen) + toPadTo
+		padLen = (f.MaximumSegmentLength - tailLen) + toPadTo
 	}
 
 	if padLen > headerLength {
@@ -677,8 +678,8 @@ func (conn *obfs4Conn) getDummyTraffic(n int) ([]byte, error) {
 
 	var overhead = framing.FrameOverhead + packetOverhead
 	var frameBuf bytes.Buffer
-	for n > maxPacketPaddingLength {
-		err := conn.makePacket(&frameBuf, packetTypePayload, nil, maxPacketPaddingLength)
+	for n > maxPacketPayloadLength {
+		err := conn.makePacket(&frameBuf, packetTypePayload, nil, maxPacketPayloadLength)
 		if err != nil {
 			return nil, err
 		}

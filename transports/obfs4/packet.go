@@ -35,15 +35,13 @@ import (
 
 	"gitlab.com/yawning/obfs4.git/common/drbg"
 	"gitlab.com/yawning/obfs4.git/transports/obfs4/framing"
+	f "gitlab.com/yawning/obfs4.git/common/framing"
 )
 
 const (
-	packetOverhead          = 2 + 1
+	packetOverhead          = f.LengthLength + f.TypeLength
 	maxPacketPayloadLength  = framing.MaximumFramePayloadLength - packetOverhead
-	maxPacketPaddingLength  = maxPacketPayloadLength
 	seedPacketPayloadLength = seedLength
-
-	consumeReadSize = framing.MaximumSegmentLength * 16
 )
 
 const (
@@ -59,15 +57,7 @@ func (e InvalidPacketLengthError) Error() string {
 	return fmt.Sprintf("packet: Invalid packet length: %d", int(e))
 }
 
-// InvalidPayloadLengthError is the error returned when decodePacket rejects the
-// payload length.
-type InvalidPayloadLengthError int
-
-func (e InvalidPayloadLengthError) Error() string {
-	return fmt.Sprintf("packet: Invalid payload length: %d", int(e))
-}
-
-var zeroPadBytes [maxPacketPaddingLength]byte
+var zeroPadBytes [maxPacketPayloadLength]byte
 
 func (conn *obfs4Conn) makePacket(w io.Writer, pktType uint8, data []byte, padLen uint16) error {
 	var pkt [framing.MaximumFramePayloadLength]byte
@@ -83,16 +73,16 @@ func (conn *obfs4Conn) makePacket(w io.Writer, pktType uint8, data []byte, padLe
 	//   uint8_t[] payload Data payload.
 	//   uint8_t[] padding Padding.
 	pkt[0] = pktType
-	binary.BigEndian.PutUint16(pkt[1:], uint16(len(data)))
+	binary.BigEndian.PutUint16(pkt[f.TypeLength:], uint16(len(data)))
 	if len(data) > 0 {
-		copy(pkt[3:], data[:])
+		copy(pkt[f.TypeLength + f.LengthLength:], data[:])
 	}
-	copy(pkt[3+len(data):], zeroPadBytes[:padLen])
+	copy(pkt[f.TypeLength + f.LengthLength+len(data):], zeroPadBytes[:padLen])
 
 	pktLen := packetOverhead + len(data) + int(padLen)
 
 	// Encode the packet in an AEAD frame.
-	var frame [framing.MaximumSegmentLength]byte
+	var frame [f.MaximumSegmentLength]byte
 	frameLen, err := conn.encoder.Encode(frame[:], pkt[:pktLen])
 	if err != nil {
 		// All encoder errors are fatal.
@@ -118,7 +108,7 @@ func (conn *obfs4Conn) readPackets() (err error) {
 		// Decrypt an AEAD frame.
 		decLen := 0
 		decLen, err = conn.decoder.Decode(decoded[:], conn.receiveBuffer)
-		if err == framing.ErrAgain {
+		if err == f.ErrAgain {
 			break
 		} else if err != nil {
 			break
@@ -132,10 +122,10 @@ func (conn *obfs4Conn) readPackets() (err error) {
 		pktType := pkt[0]
 		payloadLen := binary.BigEndian.Uint16(pkt[1:])
 		if int(payloadLen) > len(pkt)-packetOverhead {
-			err = InvalidPayloadLengthError(int(payloadLen))
+			err = f.InvalidPayloadLengthError(int(payloadLen))
 			break
 		}
-		payload := pkt[3 : 3+payloadLen]
+		payload := pkt[f.TypeLength + f.LengthLength : f.TypeLength + f.LengthLength+payloadLen]
 
 		switch pktType {
 		case packetTypePayload:

@@ -69,52 +69,33 @@ import (
 
 	"gitlab.com/yawning/obfs4.git/common/csrand"
 	"gitlab.com/yawning/obfs4.git/common/drbg"
+	f "gitlab.com/yawning/obfs4.git/common/framing"
 	"golang.org/x/crypto/nacl/secretbox"
 )
 
 const (
-	// MaximumSegmentLength is the length of the largest possible segment
-	// including overhead.
-	MaximumSegmentLength = 1500 - (40 + 12)
 
 	// FrameOverhead is the length of the framing overhead.
-	FrameOverhead = lengthLength + secretbox.Overhead
+	FrameOverhead = f.LengthLength + secretbox.Overhead
 
 	// MaximumFramePayloadLength is the length of the maximum allowed payload
 	// per frame.
-	MaximumFramePayloadLength = MaximumSegmentLength - FrameOverhead
+	MaximumFramePayloadLength = f.MaximumSegmentLength - FrameOverhead
 
 	// KeyLength is the length of the Encoder/Decoder secret key.
 	KeyLength = keyLength + noncePrefixLength + drbg.SeedLength
 
-	maxFrameLength = MaximumSegmentLength - lengthLength
-	minFrameLength = FrameOverhead - lengthLength
+	minFrameLength = FrameOverhead - f.LengthLength
 
 	keyLength = 32
 
 	noncePrefixLength  = 16
 	nonceCounterLength = 8
 	nonceLength        = noncePrefixLength + nonceCounterLength
-
-	lengthLength = 2
 )
-
-// Error returned when Decoder.Decode() requires more data to continue.
-var ErrAgain = errors.New("framing: More data needed to decode")
-
-// Error returned when Decoder.Decode() failes to authenticate a frame.
-var ErrTagMismatch = errors.New("framing: Poly1305 tag mismatch")
 
 // Error returned when the NaCl secretbox nonce's counter wraps (FATAL).
 var ErrNonceCounterWrapped = errors.New("framing: Nonce counter wrapped")
-
-// InvalidPayloadLengthError is the error returned when Encoder.Encode()
-// rejects the payload length.
-type InvalidPayloadLengthError int
-
-func (e InvalidPayloadLengthError) Error() string {
-	return fmt.Sprintf("framing: Invalid payload length: %d", int(e))
-}
 
 type boxNonce struct {
 	prefix  [noncePrefixLength]byte
@@ -178,7 +159,7 @@ func NewEncoder(key []byte) *Encoder {
 func (encoder *Encoder) Encode(frame, payload []byte) (n int, err error) {
 	payloadLen := len(payload)
 	if MaximumFramePayloadLength < payloadLen {
-		return 0, InvalidPayloadLengthError(payloadLen)
+		return 0, f.InvalidPayloadLengthError(payloadLen)
 	}
 	if len(frame) < payloadLen+FrameOverhead {
 		return 0, io.ErrShortBuffer
@@ -192,10 +173,10 @@ func (encoder *Encoder) Encode(frame, payload []byte) (n int, err error) {
 	encoder.nonce.counter++
 
 	// Encrypt and MAC payload.
-	box := secretbox.Seal(frame[:lengthLength], payload, &nonce, &encoder.key)
+	box := secretbox.Seal(frame[:f.LengthLength], payload, &nonce, &encoder.key)
 
 	// Obfuscate the length.
-	length := uint16(len(box) - lengthLength)
+	length := uint16(len(box) - f.LengthLength)
 	lengthMask := encoder.drbg.NextBlock()
 	length ^= binary.BigEndian.Uint16(lengthMask)
 	binary.BigEndian.PutUint16(frame[:2], length)
@@ -242,12 +223,12 @@ func (decoder *Decoder) Decode(data []byte, frames *bytes.Buffer) (int, error) {
 	// going to be.
 	if decoder.nextLength == 0 {
 		// Attempt to pull out the next frame length.
-		if lengthLength > frames.Len() {
-			return 0, ErrAgain
+		if f.LengthLength > frames.Len() {
+			return 0, f.ErrAgain
 		}
 
 		// Remove the length field from the buffer.
-		var obfsLen [lengthLength]byte
+		var obfsLen [f.LengthLength]byte
 		_, err := io.ReadFull(frames, obfsLen[:])
 		if err != nil {
 			return 0, err
@@ -262,7 +243,7 @@ func (decoder *Decoder) Decode(data []byte, frames *bytes.Buffer) (int, error) {
 		length := binary.BigEndian.Uint16(obfsLen[:])
 		lengthMask := decoder.drbg.NextBlock()
 		length ^= binary.BigEndian.Uint16(lengthMask)
-		if maxFrameLength < length || minFrameLength > length {
+		if f.MaxFrameLength < length || minFrameLength > length {
 			// Per "Plaintext Recovery Attacks Against SSH" by
 			// Martin R. Albrecht, Kenneth G. Paterson and Gaven J. Watson,
 			// there are a class of attacks againt protocols that use similar
@@ -275,17 +256,17 @@ func (decoder *Decoder) Decode(data []byte, frames *bytes.Buffer) (int, error) {
 			// paper.
 
 			decoder.nextLengthInvalid = true
-			length = uint16(csrand.IntRange(minFrameLength, maxFrameLength))
+			length = uint16(csrand.IntRange(minFrameLength, f.MaxFrameLength))
 		}
 		decoder.nextLength = length
 	}
 
 	if int(decoder.nextLength) > frames.Len() {
-		return 0, ErrAgain
+		return 0, f.ErrAgain
 	}
 
 	// Unseal the frame.
-	var box [maxFrameLength]byte
+	var box [f.MaxFrameLength]byte
 	n, err := io.ReadFull(frames, box[:decoder.nextLength])
 	if err != nil {
 		return 0, err
@@ -294,7 +275,7 @@ func (decoder *Decoder) Decode(data []byte, frames *bytes.Buffer) (int, error) {
 	if !ok || decoder.nextLengthInvalid {
 		// When a random length is used (on length error) the tag should always
 		// mismatch, but be paranoid.
-		return 0, ErrTagMismatch
+		return 0, f.ErrTagMismatch
 	}
 
 	// Clean up and prepare for the next frame.
