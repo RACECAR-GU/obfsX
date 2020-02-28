@@ -153,6 +153,13 @@ func NewObfsEncoder(key []byte) *ObfsEncoder {
 	return encoder
 }
 
+// ObfuscateLength creates a mask and obfuscates the payloads length
+func (encoder *ObfsEncoder) ObfuscateLength(frame []byte, length uint16) {
+	lengthMask := encoder.drbg.NextBlock()
+	length ^= binary.BigEndian.Uint16(lengthMask)
+	binary.BigEndian.PutUint16(frame[:2], length)
+}
+
 // Encode encodes a single frame worth of payload and returns the encoded
 // length.  InvalidPayloadLengthError is recoverable, all other errors MUST be
 // treated as fatal and the session aborted.
@@ -175,11 +182,7 @@ func (encoder *ObfsEncoder) Encode(frame, payload []byte) (n int, err error) {
 	// Encrypt and MAC payload.
 	box := secretbox.Seal(frame[:f.LengthLength], payload, &nonce, &encoder.key)
 
-	// Obfuscate the length.
-	length := uint16(len(box) - f.LengthLength)
-	lengthMask := encoder.drbg.NextBlock()
-	length ^= binary.BigEndian.Uint16(lengthMask)
-	binary.BigEndian.PutUint16(frame[:2], length)
+	encoder.ObfuscateLength(frame, uint16(len(box) - f.LengthLength))
 
 	// Return the frame.
 	return len(box), nil
