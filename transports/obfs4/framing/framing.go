@@ -28,7 +28,7 @@
 //
 // Package framing implements the obfs4 link framing and cryptography.
 //
-// The Encoder/Decoder shared secret format is:
+// The ObfsEncoder/Decoder shared secret format is:
 //    uint8_t[32] NaCl secretbox key
 //    uint8_t[16] NaCl Nonce prefix
 //    uint8_t[16] SipHash-2-4 key (used to obfsucate length)
@@ -82,7 +82,7 @@ const (
 	// per frame.
 	MaximumFramePayloadLength = f.MaximumSegmentLength - FrameOverhead
 
-	// KeyLength is the length of the Encoder/Decoder secret key.
+	// KeyLength is the length of the ObfsEncoder/Decoder secret key.
 	KeyLength = keyLength + noncePrefixLength + drbg.SeedLength
 
 	minFrameLength = FrameOverhead - f.LengthLength
@@ -127,21 +127,21 @@ func (nonce boxNonce) bytes(out *[nonceLength]byte) error {
 	return nil
 }
 
-// Encoder is a frame encoder instance.
-type Encoder struct {
+// ObfsEncoder is a frame encoder instance.
+type ObfsEncoder struct {
 	key   [keyLength]byte
 	nonce boxNonce
 	drbg  *drbg.HashDrbg
 }
 
-// NewEncoder creates a new Encoder instance.  It must be supplied a slice
+// NewObfsEncoder creates a new ObfsEncoder instance.  It must be supplied a slice
 // containing exactly KeyLength bytes of keying material.
-func NewEncoder(key []byte) *Encoder {
+func NewObfsEncoder(key []byte) *ObfsEncoder {
 	if len(key) != KeyLength {
 		panic(fmt.Sprintf("BUG: Invalid encoder key length: %d", len(key)))
 	}
 
-	encoder := new(Encoder)
+	encoder := new(ObfsEncoder)
 	copy(encoder.key[:], key[0:keyLength])
 	encoder.nonce.init(key[keyLength : keyLength+noncePrefixLength])
 	seed, err := drbg.SeedFromBytes(key[keyLength+noncePrefixLength:])
@@ -156,7 +156,7 @@ func NewEncoder(key []byte) *Encoder {
 // Encode encodes a single frame worth of payload and returns the encoded
 // length.  InvalidPayloadLengthError is recoverable, all other errors MUST be
 // treated as fatal and the session aborted.
-func (encoder *Encoder) Encode(frame, payload []byte) (n int, err error) {
+func (encoder *ObfsEncoder) Encode(frame, payload []byte) (n int, err error) {
 	payloadLen := len(payload)
 	if MaximumFramePayloadLength < payloadLen {
 		return 0, f.InvalidPayloadLengthError(payloadLen)

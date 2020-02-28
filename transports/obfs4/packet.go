@@ -60,6 +60,10 @@ func (e InvalidPacketLengthError) Error() string {
 var zeroPadBytes [maxPacketPayloadLength]byte
 
 func padData(data []byte, padLen uint16) []byte {
+	// Padded data is:
+	//   uint16_t length   Length of the payload (Big Endian).
+	//   uint8_t[] payload Data payload.
+	//   uint8_t[] padding Padding.
 	paddedData := make([]byte, f.LengthLength + len(data) + int(padLen))
 	binary.BigEndian.PutUint16(paddedData[:], uint16(len(data)))
 	if len(data) > 0 {
@@ -81,9 +85,7 @@ func (conn *obfs4Conn) makePacket(w io.Writer, pktType uint8, data []byte, padLe
 
 	// Packets are:
 	//   uint8_t type      packetTypePayload (0x00)
-	//   uint16_t length   Length of the payload (Big Endian).
-	//   uint8_t[] payload Data payload.
-	//   uint8_t[] padding Padding.
+	//	 uint8_t					 padded data
 	pkt[0] = pktType
 	paddedData := padData(data, padLen)
 	copy(pkt[f.TypeLength:], paddedData)

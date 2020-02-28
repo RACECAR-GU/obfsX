@@ -311,7 +311,7 @@ type obfs4Conn struct {
 	receiveDecodedBuffer *bytes.Buffer
 	readBuffer           []byte
 
-	encoder *framing.Encoder
+	encoder *framing.ObfsEncoder
 	decoder *framing.Decoder
 
 	connEstablished bool
@@ -403,7 +403,7 @@ func (conn *obfs4Conn) clientHandshake(nodeID *ntor.NodeID, peerIdentityKey *nto
 
 		// Use the derived key material to intialize the link crypto.
 		okm := ntor.Kdf(seed, framing.KeyLength*2)
-		conn.encoder = framing.NewEncoder(okm[:framing.KeyLength])
+		conn.encoder = framing.NewObfsEncoder(okm[:framing.KeyLength])
 		conn.decoder = framing.NewDecoder(okm[framing.KeyLength:])
 		conn.connEstablished = true
 
@@ -447,7 +447,7 @@ func (conn *obfs4Conn) serverHandshake(sf *obfs4ServerFactory, sessionKey *ntor.
 
 		// Use the derived key material to intialize the link crypto.
 		okm := ntor.Kdf(seed, framing.KeyLength*2)
-		conn.encoder = framing.NewEncoder(okm[framing.KeyLength:])
+		conn.encoder = framing.NewObfsEncoder(okm[framing.KeyLength:])
 		conn.decoder = framing.NewDecoder(okm[:framing.KeyLength])
 
 		break
