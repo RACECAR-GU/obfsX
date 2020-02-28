@@ -59,6 +59,18 @@ func (e InvalidPacketLengthError) Error() string {
 
 var zeroPadBytes [maxPacketPayloadLength]byte
 
+func padData(data []byte, padLen uint16) []byte {
+	paddedData := make([]byte, f.LengthLength + len(data) + int(padLen))
+	binary.BigEndian.PutUint16(paddedData[:], uint16(len(data)))
+	if len(data) > 0 {
+		copy(paddedData[f.LengthLength:], data[:])
+	}
+	if padLen > 0 {
+		copy(paddedData[f.LengthLength+len(data):], zeroPadBytes[:padLen])
+	}
+	return paddedData
+}
+
 func (conn *obfs4Conn) makePacket(w io.Writer, pktType uint8, data []byte, padLen uint16) error {
 	var pkt [framing.MaximumFramePayloadLength]byte
 
@@ -73,13 +85,9 @@ func (conn *obfs4Conn) makePacket(w io.Writer, pktType uint8, data []byte, padLe
 	//   uint8_t[] payload Data payload.
 	//   uint8_t[] padding Padding.
 	pkt[0] = pktType
-	binary.BigEndian.PutUint16(pkt[f.TypeLength:], uint16(len(data)))
-	if len(data) > 0 {
-		copy(pkt[f.TypeLength + f.LengthLength:], data[:])
-	}
-	copy(pkt[f.TypeLength + f.LengthLength+len(data):], zeroPadBytes[:padLen])
-
-	pktLen := packetOverhead + len(data) + int(padLen)
+	paddedData := padData(data, padLen)
+	copy(pkt[f.TypeLength:], paddedData)
+	pktLen := f.TypeLength + len(paddedData)
 
 	// Encode the packet in an AEAD frame.
 	var frame [f.MaximumSegmentLength]byte
