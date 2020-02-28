@@ -129,9 +129,9 @@ func (nonce boxNonce) bytes(out *[nonceLength]byte) error {
 
 // ObfsEncoder is a frame encoder instance.
 type ObfsEncoder struct {
+	f.BaseEncoder
 	key   [keyLength]byte
 	nonce boxNonce
-	drbg  *drbg.HashDrbg
 }
 
 // NewObfsEncoder creates a new ObfsEncoder instance.  It must be supplied a slice
@@ -148,16 +148,9 @@ func NewObfsEncoder(key []byte) *ObfsEncoder {
 	if err != nil {
 		panic(fmt.Sprintf("BUG: Failed to initialize DRBG: %s", err))
 	}
-	encoder.drbg, _ = drbg.NewHashDrbg(seed)
+	encoder.Drbg, _ = drbg.NewHashDrbg(seed)
 
 	return encoder
-}
-
-// ObfuscateLength creates a mask and obfuscates the payloads length
-func (encoder *ObfsEncoder) ObfuscateLength(frame []byte, length uint16) {
-	lengthMask := encoder.drbg.NextBlock()
-	length ^= binary.BigEndian.Uint16(lengthMask)
-	binary.BigEndian.PutUint16(frame[:2], length)
 }
 
 // Encode encodes a single frame worth of payload and returns the encoded

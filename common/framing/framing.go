@@ -4,6 +4,7 @@ package framing
 import (
   "fmt"
   "errors"
+  "encoding/binary"
 
   "gitlab.com/yawning/obfs4.git/common/drbg"
 )
@@ -38,10 +39,24 @@ func (e InvalidPayloadLengthError) Error() string {
 	return fmt.Sprintf("framing: Invalid payload length: %d", int(e))
 }
 
+/*
 func Gendrbg(key []byte) (*drbg.HashDrbg, error) {
   seed, err := drbg.SeedFromBytes(key)
 	if err != nil {
 		panic(fmt.Sprintf("BUG: Failed to initialize DRBG: %s", err))
 	}
   return drbg.NewHashDrbg(seed)
+}
+*/
+
+// BaseEncoder implements the core encoder vars and functions
+type BaseEncoder struct {
+  Drbg *drbg.HashDrbg
+}
+
+// ObfuscateLength creates a mask and obfuscates the payloads length
+func (encoder *BaseEncoder) ObfuscateLength(frame []byte, length uint16) {
+	lengthMask := encoder.Drbg.NextBlock()
+	length ^= binary.BigEndian.Uint16(lengthMask)
+	binary.BigEndian.PutUint16(frame[:2], length)
 }
