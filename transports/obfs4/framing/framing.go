@@ -163,7 +163,7 @@ func (encoder *ObfsEncoder) encode(frame, payload []byte) (n int, err error) {
 	if MaximumFramePayloadLength < payloadLen {
 		return 0, f.InvalidPayloadLengthError(payloadLen)
 	}
-	if len(frame) < payloadLen+FrameOverhead {
+	if len(frame) < payloadLen+secretbox.Overhead {
 		return 0, io.ErrShortBuffer
 	}
 
