@@ -60,6 +60,12 @@ func (e InvalidPacketLengthError) Error() string {
 var zeroPadBytes [maxPacketPayloadLength]byte
 
 func makePayload(pktType uint8, data []byte, padLen uint16) []byte {
+
+	if len(data)+int(padLen) > maxPacketPayloadLength {
+		panic(fmt.Sprintf("BUG: makePacket() len(data) + padLen > maxPacketPayloadLength: %d + %d > %d",
+			len(data), padLen, maxPacketPayloadLength))
+	}
+
 	// Payload is:
 	//   uint8_t type      packetTypePayload (0x00)
 	//   uint16_t length   Length of the payload (Big Endian).
@@ -77,14 +83,7 @@ func makePayload(pktType uint8, data []byte, padLen uint16) []byte {
 	return payload
 }
 
-func (conn *obfs4Conn) makePacket(w io.Writer, pktType uint8, data []byte, padLen uint16) error {
-
-	if len(data)+int(padLen) > maxPacketPayloadLength {
-		panic(fmt.Sprintf("BUG: makePacket() len(data) + padLen > maxPacketPayloadLength: %d + %d > %d",
-			len(data), padLen, maxPacketPayloadLength))
-	}
-
-	payload := makePayload(pktType, data, padLen)
+func (conn *obfs4Conn) makePacket(w io.Writer, payload []byte) error {
 
 	// Encode the packet in an AEAD frame.
 	var frame [f.MaximumSegmentLength]byte
