@@ -59,22 +59,21 @@ type BaseEncoder struct {
   Encode encodeFunc
 }
 
-// ObfuscateLength creates a mask and obfuscates the payloads length
-func (encoder *BaseEncoder) ObfuscateLength(frame []byte, length uint16) {
-	lengthMask := encoder.Drbg.NextBlock()
-	length ^= binary.BigEndian.Uint16(lengthMask)
-	binary.BigEndian.PutUint16(frame[:2], length)
-}
-
 func (encoder *BaseEncoder) MakePacket(w io.Writer, payload []byte) error {
 	// Encode the packet in an AEAD frame.
 	var frame [MaximumSegmentLength]byte
-	frameLen, err := encoder.Encode(frame[:], payload[:len(payload)])
+	frameLen, err := encoder.Encode(frame[LengthLength:], payload[:len(payload)])
 	if err != nil {
 		// All encoder errors are fatal.
 		return err
 	}
-	wrLen, err := w.Write(frame[:frameLen])
+
+  length := uint16(frameLen)
+  lengthMask := encoder.Drbg.NextBlock()
+	length ^= binary.BigEndian.Uint16(lengthMask)
+	binary.BigEndian.PutUint16(frame[:LengthLength], length)
+
+	wrLen, err := w.Write(frame[:LengthLength + frameLen])
 	if err != nil {
 		return err
 	} else if wrLen < frameLen {

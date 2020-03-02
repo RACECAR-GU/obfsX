@@ -175,9 +175,7 @@ func (encoder *ObfsEncoder) encode(frame, payload []byte) (n int, err error) {
 	encoder.nonce.counter++
 
 	// Encrypt and MAC payload.
-	box := secretbox.Seal(frame[:f.LengthLength], payload, &nonce, &encoder.key)
-
-	encoder.ObfuscateLength(frame, uint16(len(box) - f.LengthLength))
+	box := secretbox.Seal(frame[:0], payload, &nonce, &encoder.key)
 
 	// Return the frame.
 	return len(box), nil
