@@ -59,20 +59,22 @@ func (e InvalidPacketLengthError) Error() string {
 
 var zeroPadBytes [maxPacketPayloadLength]byte
 
-func padData(data []byte, padLen uint16) []byte {
-	// Padded data is:
+func makePayload(pktType uint8, data []byte, padLen uint16) []byte {
+	// Payload is:
+	//   uint8_t type      packetTypePayload (0x00)
 	//   uint16_t length   Length of the payload (Big Endian).
 	//   uint8_t[] payload Data payload.
 	//   uint8_t[] padding Padding.
-	paddedData := make([]byte, f.LengthLength + len(data) + int(padLen))
-	binary.BigEndian.PutUint16(paddedData[:], uint16(len(data)))
+	payload := make([]byte, f.TypeLength + f.LengthLength + len(data) + int(padLen))
+	payload[0] = pktType
+	binary.BigEndian.PutUint16(payload[f.TypeLength:], uint16(len(data)))
 	if len(data) > 0 {
-		copy(paddedData[f.LengthLength:], data[:])
+		copy(payload[f.TypeLength+f.LengthLength:], data[:])
 	}
 	if padLen > 0 {
-		copy(paddedData[f.LengthLength+len(data):], zeroPadBytes[:padLen])
+		copy(payload[f.TypeLength+f.LengthLength+len(data):], zeroPadBytes[:padLen])
 	}
-	return paddedData
+	return payload
 }
 
 func (conn *obfs4Conn) makePacket(w io.Writer, pktType uint8, data []byte, padLen uint16) error {
@@ -83,17 +85,11 @@ func (conn *obfs4Conn) makePacket(w io.Writer, pktType uint8, data []byte, padLe
 			len(data), padLen, maxPacketPayloadLength))
 	}
 
-	// Packets are:
-	//   uint8_t type      packetTypePayload (0x00)
-	//	 uint8_t					 padded data
-	pkt[0] = pktType
-	paddedData := padData(data, padLen)
-	copy(pkt[f.TypeLength:], paddedData)
-	pktLen := f.TypeLength + len(paddedData)
+	payload := makePayload(pktType, data, padLen)
 
 	// Encode the packet in an AEAD frame.
 	var frame [f.MaximumSegmentLength]byte
-	frameLen, err := conn.encoder.Encode(frame[:], pkt[:pktLen])
+	frameLen, err := conn.encoder.Encode(frame[:], payload[:len(payload)])
 	if err != nil {
 		// All encoder errors are fatal.
 		return err
