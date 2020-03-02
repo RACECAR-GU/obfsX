@@ -78,7 +78,6 @@ func makePayload(pktType uint8, data []byte, padLen uint16) []byte {
 }
 
 func (conn *obfs4Conn) makePacket(w io.Writer, pktType uint8, data []byte, padLen uint16) error {
-	var pkt [framing.MaximumFramePayloadLength]byte
 
 	if len(data)+int(padLen) > maxPacketPayloadLength {
 		panic(fmt.Sprintf("BUG: makePacket() len(data) + padLen > maxPacketPayloadLength: %d + %d > %d",
