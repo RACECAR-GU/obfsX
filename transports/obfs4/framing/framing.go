@@ -152,6 +152,10 @@ func NewObfsEncoder(key []byte) *ObfsEncoder {
 
 	encoder.Encode = encoder.encode
 
+	// encoder.MacPacketPayloadLength is set in obfs4.go
+
+	// encoder.ChopPayload is set in obfs4.go
+
 	return encoder
 }
 

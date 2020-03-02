@@ -5,6 +5,7 @@ import (
   "io"
   "fmt"
   "errors"
+  "bytes"
   "encoding/binary"
 
   "gitlab.com/yawning/obfs4.git/common/drbg"
@@ -51,12 +52,15 @@ func Gendrbg(key []byte) (*drbg.HashDrbg, error) {
 */
 
 type encodeFunc func(frame, payload []byte) (n int, err error)
+type chopPayloadFunc func(pktType uint8, payload []byte) []byte
 
 // BaseEncoder implements the core encoder vars and functions
 type BaseEncoder struct {
   Drbg *drbg.HashDrbg
+  MaxPacketPayloadLength int
 
   Encode encodeFunc
+  ChopPayload chopPayloadFunc
 }
 
 func (encoder *BaseEncoder) MakePacket(w io.Writer, payload []byte) error {
@@ -81,4 +85,26 @@ func (encoder *BaseEncoder) MakePacket(w io.Writer, payload []byte) error {
 	}
 
 	return nil
+}
+
+// Chop the pending data into payload frames.
+func (encoder *BaseEncoder) Chop(b []byte, pktType uint8) (frameBuf bytes.Buffer, n int, err error) {
+	chopBuf := bytes.NewBuffer(b)
+	payload := make([]byte, encoder.MaxPacketPayloadLength)
+	for chopBuf.Len() > 0 {
+		// Send maximum sized frames.
+		rdLen := 0
+		rdLen, err = chopBuf.Read(payload[:])
+		if err != nil {
+			return frameBuf, 0, err
+		} else if rdLen == 0 {
+			panic(fmt.Sprintf("BUG: Write(), chopping length was 0"))
+		}
+		n += rdLen
+    err = encoder.MakePacket(&frameBuf, encoder.ChopPayload(pktType, payload[:rdLen]))
+		if err != nil {
+			return frameBuf, 0, err
+		}
+	}
+	return
 }

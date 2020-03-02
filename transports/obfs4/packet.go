@@ -58,10 +58,14 @@ func (e InvalidPacketLengthError) Error() string {
 
 var zeroPadBytes [maxPacketPayloadLength]byte
 
+func makeUnpaddedPayload(pktType uint8, data []byte) []byte {
+	return makePayload(pktType, data, 0)
+}
+
 func makePayload(pktType uint8, data []byte, padLen uint16) []byte {
 
 	if len(data)+int(padLen) > maxPacketPayloadLength {
-		panic(fmt.Sprintf("BUG: makePacket() len(data) + padLen > maxPacketPayloadLength: %d + %d > %d",
+		panic(fmt.Sprintf("BUG: makePacyload() len(data) + padLen > maxPacketPayloadLength: %d + %d > %d",
 			len(data), padLen, maxPacketPayloadLength))
 	}
 

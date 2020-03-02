@@ -403,12 +403,19 @@ func (conn *obfs4Conn) clientHandshake(nodeID *ntor.NodeID, peerIdentityKey *nto
 
 		// Use the derived key material to intialize the link crypto.
 		okm := ntor.Kdf(seed, framing.KeyLength*2)
-		conn.encoder = framing.NewObfsEncoder(okm[:framing.KeyLength])
+		conn.encoder = newEncoder(okm[:framing.KeyLength])
 		conn.decoder = framing.NewDecoder(okm[framing.KeyLength:])
 		conn.connEstablished = true
 
 		return nil
 	}
+}
+
+func newEncoder(key []byte) *framing.ObfsEncoder {
+	encoder := framing.NewObfsEncoder(key)
+	encoder.ChopPayload = makeUnpaddedPayload
+	encoder.MaxPacketPayloadLength = maxPacketPayloadLength
+	return encoder
 }
 
 func (conn *obfs4Conn) serverHandshake(sf *obfs4ServerFactory, sessionKey *ntor.Keypair) error {
@@ -447,7 +454,7 @@ func (conn *obfs4Conn) serverHandshake(sf *obfs4ServerFactory, sessionKey *ntor.
 
 		// Use the derived key material to intialize the link crypto.
 		okm := ntor.Kdf(seed, framing.KeyLength*2)
-		conn.encoder = framing.NewObfsEncoder(okm[framing.KeyLength:])
+		conn.encoder = newEncoder(okm[framing.KeyLength:])
 		conn.decoder = framing.NewDecoder(okm[:framing.KeyLength])
 
 		break
@@ -516,26 +523,10 @@ func (conn *obfs4Conn) Read(b []byte) (n int, err error) {
 }
 
 func (conn *obfs4Conn) Write(b []byte) (n int, err error) {
-	chopBuf := bytes.NewBuffer(b)
-	var payload [maxPacketPayloadLength]byte
 	var frameBuf bytes.Buffer
-
-	// Chop the pending data into payload frames.
-	for chopBuf.Len() > 0 {
-		// Send maximum sized frames.
-		rdLen := 0
-		rdLen, err = chopBuf.Read(payload[:])
-		if err != nil {
-			return 0, err
-		} else if rdLen == 0 {
-			panic(fmt.Sprintf("BUG: Write(), chopping length was 0"))
-		}
-		n += rdLen
-
-		err = conn.encoder.MakePacket(&frameBuf, makePayload(packetTypePayload, payload[:rdLen], 0))
-		if err != nil {
-			return 0, err
-		}
+	frameBuf, n, err = conn.encoder.Chop(b, packetTypePayload)
+	if err != nil {
+		return
 	}
 
 	if conn.iatMode != iatParanoid {
