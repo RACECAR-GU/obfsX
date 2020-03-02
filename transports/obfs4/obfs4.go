@@ -473,7 +473,7 @@ func (conn *obfs4Conn) serverHandshake(sf *obfs4ServerFactory, sessionKey *ntor.
 	}
 
 	// Send the PRNG seed as the first packet.
-	if err := conn.makePacket(&frameBuf, makePayload(packetTypePrngSeed, sf.lenSeed.Bytes()[:], 0)); err != nil {
+	if err := conn.encoder.MakePacket(&frameBuf, makePayload(packetTypePrngSeed, sf.lenSeed.Bytes()[:], 0)); err != nil {
 		return err
 	}
 	if _, err = conn.Conn.Write(frameBuf.Bytes()); err != nil {
@@ -532,7 +532,7 @@ func (conn *obfs4Conn) Write(b []byte) (n int, err error) {
 		}
 		n += rdLen
 
-		err = conn.makePacket(&frameBuf, makePayload(packetTypePayload, payload[:rdLen], 0))
+		err = conn.encoder.MakePacket(&frameBuf, makePayload(packetTypePayload, payload[:rdLen], 0))
 		if err != nil {
 			return 0, err
 		}
@@ -645,16 +645,16 @@ func (conn *obfs4Conn) padBurst(burst *bytes.Buffer, toPadTo int) (err error) {
 	}
 
 	if padLen > headerLength {
-		err = conn.makePacket(burst, makePayload(packetTypePayload, []byte{}, uint16(padLen-headerLength)))
+		err = conn.encoder.MakePacket(burst, makePayload(packetTypePayload, []byte{}, uint16(padLen-headerLength)))
 		if err != nil {
 			return
 		}
 	} else if padLen > 0 {
-		err = conn.makePacket(burst, makePayload(packetTypePayload, []byte{}, maxPacketPayloadLength))
+		err = conn.encoder.MakePacket(burst, makePayload(packetTypePayload, []byte{}, maxPacketPayloadLength))
 		if err != nil {
 			return
 		}
-		err = conn.makePacket(burst, makePayload(packetTypePayload, []byte{}, uint16(padLen)))
+		err = conn.encoder.MakePacket(burst, makePayload(packetTypePayload, []byte{}, uint16(padLen)))
 		if err != nil {
 			return
 		}
@@ -676,7 +676,7 @@ func (conn *obfs4Conn) getDummyTraffic(n int) ([]byte, error) {
 	var overhead = framing.FrameOverhead + packetOverhead
 	var frameBuf bytes.Buffer
 	for n > maxPacketPayloadLength {
-		err := conn.makePacket(&frameBuf, makePayload(packetTypePayload, nil, maxPacketPayloadLength))
+		err := conn.encoder.MakePacket(&frameBuf, makePayload(packetTypePayload, nil, maxPacketPayloadLength))
 		if err != nil {
 			return nil, err
 		}
@@ -688,7 +688,7 @@ func (conn *obfs4Conn) getDummyTraffic(n int) ([]byte, error) {
 		log.Debugf("Remaining n < frame overhead.")
 		n = overhead
 	}
-	err := conn.makePacket(&frameBuf, makePayload(packetTypePayload, nil, uint16(n-overhead)))
+	err := conn.encoder.MakePacket(&frameBuf, makePayload(packetTypePayload, nil, uint16(n-overhead)))
 	if err != nil {
 		return nil, err
 	}

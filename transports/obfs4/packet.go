@@ -31,7 +31,6 @@ import (
 	"crypto/sha256"
 	"encoding/binary"
 	"fmt"
-	"io"
 
 	"gitlab.com/yawning/obfs4.git/common/drbg"
 	"gitlab.com/yawning/obfs4.git/transports/obfs4/framing"
@@ -81,25 +80,6 @@ func makePayload(pktType uint8, data []byte, padLen uint16) []byte {
 		copy(payload[f.TypeLength+f.LengthLength+len(data):], zeroPadBytes[:padLen])
 	}
 	return payload
-}
-
-func (conn *obfs4Conn) makePacket(w io.Writer, payload []byte) error {
-
-	// Encode the packet in an AEAD frame.
-	var frame [f.MaximumSegmentLength]byte
-	frameLen, err := conn.encoder.Encode(frame[:], payload[:len(payload)])
-	if err != nil {
-		// All encoder errors are fatal.
-		return err
-	}
-	wrLen, err := w.Write(frame[:frameLen])
-	if err != nil {
-		return err
-	} else if wrLen < frameLen {
-		return io.ErrShortWrite
-	}
-
-	return nil
 }
 
 func (conn *obfs4Conn) readPackets() (err error) {

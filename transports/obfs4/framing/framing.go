@@ -150,13 +150,15 @@ func NewObfsEncoder(key []byte) *ObfsEncoder {
 	}
 	encoder.Drbg, _ = drbg.NewHashDrbg(seed)
 
+	encoder.Encode = encoder.encode
+
 	return encoder
 }
 
 // Encode encodes a single frame worth of payload and returns the encoded
 // length.  InvalidPayloadLengthError is recoverable, all other errors MUST be
 // treated as fatal and the session aborted.
-func (encoder *ObfsEncoder) Encode(frame, payload []byte) (n int, err error) {
+func (encoder *ObfsEncoder) encode(frame, payload []byte) (n int, err error) {
 	payloadLen := len(payload)
 	if MaximumFramePayloadLength < payloadLen {
 		return 0, f.InvalidPayloadLengthError(payloadLen)

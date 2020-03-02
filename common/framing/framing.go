@@ -2,6 +2,7 @@
 package framing
 
 import (
+  "io"
   "fmt"
   "errors"
   "encoding/binary"
@@ -49,9 +50,13 @@ func Gendrbg(key []byte) (*drbg.HashDrbg, error) {
 }
 */
 
+type encodeFunc func(frame, payload []byte) (n int, err error)
+
 // BaseEncoder implements the core encoder vars and functions
 type BaseEncoder struct {
   Drbg *drbg.HashDrbg
+
+  Encode encodeFunc
 }
 
 // ObfuscateLength creates a mask and obfuscates the payloads length
@@ -59,4 +64,22 @@ func (encoder *BaseEncoder) ObfuscateLength(frame []byte, length uint16) {
 	lengthMask := encoder.Drbg.NextBlock()
 	length ^= binary.BigEndian.Uint16(lengthMask)
 	binary.BigEndian.PutUint16(frame[:2], length)
+}
+
+func (encoder *BaseEncoder) MakePacket(w io.Writer, payload []byte) error {
+	// Encode the packet in an AEAD frame.
+	var frame [MaximumSegmentLength]byte
+	frameLen, err := encoder.Encode(frame[:], payload[:len(payload)])
+	if err != nil {
+		// All encoder errors are fatal.
+		return err
+	}
+	wrLen, err := w.Write(frame[:frameLen])
+	if err != nil {
+		return err
+	} else if wrLen < frameLen {
+		return io.ErrShortWrite
+	}
+
+	return nil
 }
