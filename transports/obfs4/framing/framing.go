@@ -133,26 +133,31 @@ type ObfsEncoder struct {
 	key   [keyLength]byte
 	nonce boxNonce
 }
+func (encoder *ObfsEncoder) payloadOverhead(_ int) int {
+	return secretbox.Overhead
+}
 
 // NewObfsEncoder creates a new ObfsEncoder instance.  It must be supplied a slice
 // containing exactly KeyLength bytes of keying material.
 func NewObfsEncoder(key []byte) *ObfsEncoder {
+
+	encoder := new(ObfsEncoder)
+
 	if len(key) != KeyLength {
 		panic(fmt.Sprintf("BUG: Invalid encoder key length: %d", len(key)))
 	}
 
-	encoder := new(ObfsEncoder)
 	copy(encoder.key[:], key[0:keyLength])
+
 	encoder.nonce.init(key[keyLength : keyLength+noncePrefixLength])
-	seed, err := drbg.SeedFromBytes(key[keyLength+noncePrefixLength:])
-	if err != nil {
-		panic(fmt.Sprintf("BUG: Failed to initialize DRBG: %s", err))
-	}
-	encoder.Drbg, _ = drbg.NewHashDrbg(seed)
+
+	encoder.Drbg = f.GenDrbg(key[keyLength+noncePrefixLength:])
 
 	encoder.Encode = encoder.encode
 
-	// encoder.MacPacketPayloadLength is set in obfs4.go
+	encoder.PayloadOverhead = encoder.payloadOverhead
+
+	// encoder.MaxPacketPayloadLength is set in obfs4.go
 
 	// encoder.ChopPayload is set in obfs4.go
 
@@ -163,12 +168,10 @@ func NewObfsEncoder(key []byte) *ObfsEncoder {
 // length.  InvalidPayloadLengthError is recoverable, all other errors MUST be
 // treated as fatal and the session aborted.
 func (encoder *ObfsEncoder) encode(frame, payload []byte) (n int, err error) {
+	// TODO: Consider generalizing these
 	payloadLen := len(payload)
 	if MaximumFramePayloadLength < payloadLen {
 		return 0, f.InvalidPayloadLengthError(payloadLen)
-	}
-	if len(frame) < payloadLen+secretbox.Overhead {
-		return 0, io.ErrShortBuffer
 	}
 
 	// Generate a new nonce.

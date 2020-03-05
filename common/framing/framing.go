@@ -53,11 +53,14 @@ func Gendrbg(key []byte) (*drbg.HashDrbg, error) {
 
 type encodeFunc func(frame, payload []byte) (n int, err error)
 type chopPayloadFunc func(pktType uint8, payload []byte) []byte
+type payloadOverheadFunc func(payloadLen int) int
 
 // BaseEncoder implements the core encoder vars and functions
 type BaseEncoder struct {
   Drbg *drbg.HashDrbg
   MaxPacketPayloadLength int
+
+  PayloadOverhead payloadOverheadFunc
 
   Encode encodeFunc
   ChopPayload chopPayloadFunc
@@ -66,7 +69,11 @@ type BaseEncoder struct {
 func (encoder *BaseEncoder) MakePacket(w io.Writer, payload []byte) error {
 	// Encode the packet in an AEAD frame.
 	var frame [MaximumSegmentLength]byte
-	frameLen, err := encoder.Encode(frame[LengthLength:], payload[:len(payload)])
+  payloadLen := len(payload)
+  if len(frame) < payloadLen+encoder.PayloadOverhead(payloadLen) {
+		return io.ErrShortBuffer
+	}
+	frameLen, err := encoder.Encode(frame[LengthLength:], payload[:payloadLen])
 	if err != nil {
 		// All encoder errors are fatal.
 		return err
@@ -107,4 +114,20 @@ func (encoder *BaseEncoder) Chop(b []byte, pktType uint8) (frameBuf bytes.Buffer
 		}
 	}
 	return
+}
+
+// GenDrbg creates a *drbg.HashDrbg with some safety checks
+func GenDrbg(key []byte) *drbg.HashDrbg {
+  if len(key) != drbg.SeedLength {
+    panic(fmt.Sprintf("BUG: Failed to initialize DRBG: Invalid Keylength, must be %n (drbg.SeedLength)", drbg.SeedLength))
+  }
+  seed, err := drbg.SeedFromBytes(key[:])
+	if err != nil {
+		panic(fmt.Sprintf("BUG: Failed to initialize DRBG: %s", err))
+	}
+  res, err := drbg.NewHashDrbg(seed)
+  if err != nil {
+		panic(fmt.Sprintf("BUG: Failed to initialize DRBG: %s", err))
+	}
+  return res
 }
