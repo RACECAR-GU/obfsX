@@ -384,6 +384,7 @@ func (conn *obfs4Conn) clientHandshake(nodeID *ntor.NodeID, peerIdentityKey *nto
 
 	// Consume the server handshake.
 	var hsBuf [maxHandshakeLength]byte
+	receiveBuffer = bytes.NewBuffer(nil)
 	for {
 		n, err := conn.Conn.Read(hsBuf[:])
 		if err != nil {
@@ -391,15 +392,16 @@ func (conn *obfs4Conn) clientHandshake(nodeID *ntor.NodeID, peerIdentityKey *nto
 			// no point in continuing on an EOF or whatever.
 			return err
 		}
-		conn.receiveBuffer.Write(hsBuf[:n])
+		receiveBuffer.Write(hsBuf[:n])
 
-		n, seed, err := hs.parseServerHandshake(conn.receiveBuffer.Bytes())
+		n, seed, err := hs.parseServerHandshake(receiveBuffer.Bytes())
 		if err == ErrMarkNotFoundYet {
 			continue
 		} else if err != nil {
 			return err
 		}
-		_ = conn.receiveBuffer.Next(n)
+		_ = receiveBuffer.Next(n)
+		conn.receiveBuffer = receiveBuffer
 
 		// Use the derived key material to intialize the link crypto.
 		okm := ntor.Kdf(seed, framing.KeyLength*2)
