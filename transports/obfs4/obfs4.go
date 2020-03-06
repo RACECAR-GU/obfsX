@@ -431,6 +431,7 @@ func (conn *obfs4Conn) serverHandshake(sf *obfs4ServerFactory, sessionKey *ntor.
 
 	// Consume the client handshake.
 	var hsBuf [maxHandshakeLength]byte
+	receiveBuffer := bytes.NewBuffer(nil)
 	for {
 		n, err := conn.Conn.Read(hsBuf[:])
 		if err != nil {
@@ -438,15 +439,15 @@ func (conn *obfs4Conn) serverHandshake(sf *obfs4ServerFactory, sessionKey *ntor.
 			// no point in continuing on an EOF or whatever.
 			return err
 		}
-		conn.receiveBuffer.Write(hsBuf[:n])
+		receiveBuffer.Write(hsBuf[:n])
 
-		seed, err := hs.parseClientHandshake(sf.replayFilter, conn.receiveBuffer.Bytes())
+		seed, err := hs.parseClientHandshake(sf.replayFilter, receiveBuffer.Bytes())
 		if err == ErrMarkNotFoundYet {
 			continue
 		} else if err != nil {
 			return err
 		}
-		conn.receiveBuffer.Reset()
+		receiveBuffer.Reset()
 
 		if err := conn.Conn.SetDeadline(time.Time{}); err != nil {
 			return nil
