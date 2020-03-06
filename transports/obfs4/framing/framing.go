@@ -28,7 +28,7 @@
 //
 // Package framing implements the obfs4 link framing and cryptography.
 //
-// The ObfsEncoder/Decoder shared secret format is:
+// The ObfsEncoder/ObfsDecoder shared secret format is:
 //    uint8_t[32] NaCl secretbox key
 //    uint8_t[16] NaCl Nonce prefix
 //    uint8_t[16] SipHash-2-4 key (used to obfsucate length)
@@ -82,7 +82,7 @@ const (
 	// per frame.
 	MaximumFramePayloadLength = f.MaximumSegmentLength - FrameOverhead
 
-	// KeyLength is the length of the ObfsEncoder/Decoder secret key.
+	// KeyLength is the length of the ObfsEncoder/ObfsDecoder secret key.
 	KeyLength = keyLength + noncePrefixLength + drbg.SeedLength
 
 	minFrameLength = FrameOverhead - f.LengthLength
@@ -132,10 +132,18 @@ type ObfsEncoder struct {
 	f.BaseEncoder
 	key   [keyLength]byte
 	nonce boxNonce
+	PacketOverhead int
 }
 func (encoder *ObfsEncoder) payloadOverhead(_ int) int {
 	return secretbox.Overhead
 }
+
+func (encoder *ObfsEncoder) processLength(length uint16) []byte {
+	lengthBytes := make([]byte, encoder.LengthLength)
+	binary.BigEndian.PutUint16(lengthBytes[:], length)
+	return lengthBytes
+}
+
 
 // NewObfsEncoder creates a new ObfsEncoder instance.  It must be supplied a slice
 // containing exactly KeyLength bytes of keying material.
@@ -151,14 +159,16 @@ func NewObfsEncoder(key []byte) *ObfsEncoder {
 
 	encoder.nonce.init(key[keyLength : keyLength+noncePrefixLength])
 
-	encoder.Drbg = f.GenDrbg(key[keyLength+noncePrefixLength:])
+	encoder.PacketOverhead = f.LengthLength + f.TypeLength
 
-	encoder.Encode = encoder.encode
+	encoder.Drbg = f.GenDrbg(key[keyLength+noncePrefixLength:])
+	// encoder.MaxPacketPayloadLength is set in obfs4.go
+	encoder.LengthLength = 2
 
 	encoder.PayloadOverhead = encoder.payloadOverhead
 
-	// encoder.MaxPacketPayloadLength is set in obfs4.go
-
+	encoder.Encode = encoder.encode
+	encoder.ProcessLength = encoder.processLength
 	// encoder.ChopPayload is set in obfs4.go
 
 	return encoder

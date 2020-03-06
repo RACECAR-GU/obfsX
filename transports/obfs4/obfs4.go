@@ -641,7 +641,7 @@ func (conn *obfs4Conn) padBurst(burst *bytes.Buffer, toPadTo int) (err error) {
 			return
 		}
 	} else if padLen > 0 {
-		err = conn.encoder.MakePacket(burst, makePayload(packetTypePayload, []byte{}, maxPacketPayloadLength))
+		err = conn.encoder.MakePacket(burst, makePayload(packetTypePayload, []byte{}, uint16(conn.encoder.MaxPacketPayloadLength)))
 		if err != nil {
 			return
 		}
@@ -664,14 +664,14 @@ func (conn *obfs4Conn) getDummyTraffic(n int) ([]byte, error) {
 		return nil, fmt.Errorf("Connection not yet established.  No dummy traffic available.")
 	}
 
-	var overhead = framing.FrameOverhead + packetOverhead
+	var overhead = framing.FrameOverhead + conn.encoder.PacketOverhead
 	var frameBuf bytes.Buffer
-	for n > maxPacketPayloadLength {
-		err := conn.encoder.MakePacket(&frameBuf, makePayload(packetTypePayload, nil, maxPacketPayloadLength))
+	for n > conn.encoder.MaxPacketPayloadLength {
+		err := conn.encoder.MakePacket(&frameBuf, makePayload(packetTypePayload, nil, uint16(conn.encoder.MaxPacketPayloadLength)))
 		if err != nil {
 			return nil, err
 		}
-		n -= maxPacketPayloadLength + overhead
+		n -= conn.encoder.MaxPacketPayloadLength + overhead
 	}
 	// Do we have enough remaining padding to fit it into a new frame?  If not,
 	// let's just create an empty frame.

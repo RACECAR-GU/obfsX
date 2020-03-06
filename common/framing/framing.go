@@ -23,7 +23,7 @@ const (
   TypeLength = 1
 
   // MaxFrameLength is the maximum frame length
-  MaxFrameLength = MaximumSegmentLength - LengthLength
+  // MaxFrameLength = MaximumSegmentLength - LengthLength
 
   ConsumeReadSize = MaximumSegmentLength * 16
 )
@@ -53,38 +53,47 @@ func Gendrbg(key []byte) (*drbg.HashDrbg, error) {
 
 type encodeFunc func(frame, payload []byte) (n int, err error)
 type chopPayloadFunc func(pktType uint8, payload []byte) []byte
-type payloadOverheadFunc func(payloadLen int) int
+type overheadFunc func(payloadLen int) int
+type processLengthFunc func(length uint16) []byte
 
 // BaseEncoder implements the core encoder vars and functions
 type BaseEncoder struct {
   Drbg *drbg.HashDrbg
-  MaxPacketPayloadLength int
-
-  PayloadOverhead payloadOverheadFunc
+  MaxPacketPayloadLength int // TODO: Check + maybe Implement for RR
+  LengthLength int // TODO: Implement for RR
+  PayloadOverhead overheadFunc
 
   Encode encodeFunc
+  ProcessLength processLengthFunc  // TODO: Build for RR
   ChopPayload chopPayloadFunc
 }
+
+
 
 func (encoder *BaseEncoder) MakePacket(w io.Writer, payload []byte) error {
 	// Encode the packet in an AEAD frame.
 	var frame [MaximumSegmentLength]byte
   payloadLen := len(payload)
-  if len(frame) < payloadLen+encoder.PayloadOverhead(payloadLen) {
+  payloadLenWithOverhead0 := payloadLen+encoder.PayloadOverhead(payloadLen)
+  if len(frame) - encoder.LengthLength < payloadLenWithOverhead0 {
 		return io.ErrShortBuffer
 	}
-	frameLen, err := encoder.Encode(frame[LengthLength:], payload[:payloadLen])
+  length := uint16(payloadLenWithOverhead0)
+  lengthMask := encoder.Drbg.NextBlock()
+	length ^= binary.BigEndian.Uint16(lengthMask)
+	copy(frame[:encoder.LengthLength], encoder.ProcessLength(length))
+  frameLen := encoder.LengthLength + payloadLenWithOverhead0
+	payloadLenWithOverhead1, err := encoder.Encode(frame[encoder.LengthLength:], payload[:payloadLen])
 	if err != nil {
 		// All encoder errors are fatal.
 		return err
 	}
 
-  length := uint16(frameLen)
-  lengthMask := encoder.Drbg.NextBlock()
-	length ^= binary.BigEndian.Uint16(lengthMask)
-	binary.BigEndian.PutUint16(frame[:LengthLength], length)
+  if payloadLenWithOverhead0 != payloadLenWithOverhead1 {
+    panic(fmt.Sprintf("BUG: MakePacket(), frame lengths do not align, %d %d", payloadLenWithOverhead0, payloadLenWithOverhead1))
+  }
 
-	wrLen, err := w.Write(frame[:LengthLength + frameLen])
+	wrLen, err := w.Write(frame[:frameLen])
 	if err != nil {
 		return err
 	} else if wrLen < frameLen {
@@ -105,7 +114,7 @@ func (encoder *BaseEncoder) Chop(b []byte, pktType uint8) (frameBuf bytes.Buffer
 		if err != nil {
 			return frameBuf, 0, err
 		} else if rdLen == 0 {
-			panic(fmt.Sprintf("BUG: Write(), chopping length was 0"))
+			panic(fmt.Sprintf("BUG: Chop(), chopping length was 0"))
 		}
 		n += rdLen
     err = encoder.MakePacket(&frameBuf, encoder.ChopPayload(pktType, payload[:rdLen]))
