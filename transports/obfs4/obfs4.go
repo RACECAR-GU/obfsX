@@ -282,7 +282,7 @@ func (sf *obfs4ServerFactory) WrapConn(conn net.Conn) (net.Conn, error) {
 	if err != nil {
 		return nil, err
 	}
-	c := &obfs4Conn{conn, true, lenDist, iatDist, sf.iatMode, bytes.NewBuffer(nil), bytes.NewBuffer(nil), make([]byte, f.ConsumeReadSize), nil, nil, false}
+	c := &obfs4Conn{conn, true, lenDist, iatDist, sf.iatMode, nil, nil, false}
 	c.Conn, err = riverrun.NewRiverrunConn(c.Conn, c.isServer, serverSeed)
 	if err != nil {
 		return nil, err
@@ -306,10 +306,6 @@ type obfs4Conn struct {
 	lenDist *probdist.WeightedDist
 	iatDist *probdist.WeightedDist
 	iatMode int
-
-	receiveBuffer        *bytes.Buffer
-	receiveDecodedBuffer *bytes.Buffer
-	readBuffer           []byte
 
 	encoder *framing.ObfsEncoder
 	decoder *framing.ObfsDecoder
@@ -342,7 +338,7 @@ func newObfs4ClientConn(conn net.Conn, args *obfs4ClientArgs) (c *obfs4Conn, err
 	}
 
 	// Allocate the client structure.
-	c = &obfs4Conn{conn, false, lenDist, iatDist, args.iatMode, bytes.NewBuffer(nil), bytes.NewBuffer(nil), make([]byte, f.ConsumeReadSize), nil, nil, false}
+	c = &obfs4Conn{conn, false, lenDist, iatDist, args.iatMode, nil, nil, false}
 	c.Conn, err = riverrun.NewRiverrunConn(c.Conn, c.isServer, serverSeed)
 	if err != nil {
 		return nil, err
@@ -384,7 +380,7 @@ func (conn *obfs4Conn) clientHandshake(nodeID *ntor.NodeID, peerIdentityKey *nto
 
 	// Consume the server handshake.
 	var hsBuf [maxHandshakeLength]byte
-	receiveBuffer = bytes.NewBuffer(nil)
+	receiveBuffer := bytes.NewBuffer(nil)
 	for {
 		n, err := conn.Conn.Read(hsBuf[:])
 		if err != nil {
@@ -401,12 +397,12 @@ func (conn *obfs4Conn) clientHandshake(nodeID *ntor.NodeID, peerIdentityKey *nto
 			return err
 		}
 		_ = receiveBuffer.Next(n)
-		conn.receiveBuffer = receiveBuffer
 
 		// Use the derived key material to intialize the link crypto.
 		okm := ntor.Kdf(seed, framing.KeyLength*2)
 		conn.encoder = newEncoder(okm[:framing.KeyLength])
-		conn.decoder = framing.NewObfsDecoder(okm[framing.KeyLength:])
+		conn.newDecoder(okm[framing.KeyLength:])
+		conn.decoder.ReceiveBuffer = receiveBuffer
 		conn.connEstablished = true
 
 		return nil
@@ -418,6 +414,12 @@ func newEncoder(key []byte) *framing.ObfsEncoder {
 	encoder.ChopPayload = makeUnpaddedPayload
 	encoder.MaxPacketPayloadLength = maxPacketPayloadLength
 	return encoder
+}
+
+func (conn *obfs4Conn) newDecoder(key []byte) {
+	decoder := framing.NewObfsDecoder(key)
+	decoder.PrngRegen = conn.prngRegen
+	conn.decoder = decoder
 }
 
 func (conn *obfs4Conn) serverHandshake(sf *obfs4ServerFactory, sessionKey *ntor.Keypair) error {
@@ -495,34 +497,26 @@ func (conn *obfs4Conn) serverHandshake(sf *obfs4ServerFactory, sessionKey *ntor.
 }
 
 func (conn *obfs4Conn) Read(b []byte) (n int, err error) {
-	// If there is no payload from the previous Read() calls, consume data off
-	// the network.  Not all data received is guaranteed to be usable payload,
-	// so do this in a loop till data is present or an error occurs.
-	for conn.receiveDecodedBuffer.Len() == 0 {
-		err = conn.readPackets()
-		if err == f.ErrAgain {
-			// Don't proagate this back up the call stack if we happen to break
-			// out of the loop.
-			err = nil
-			continue
-		} else if err != nil {
-			break
+	return conn.decoder.Read(b, conn.Conn)
+}
+func (conn *obfs4Conn) prngRegen(payload []byte) error {
+	// Only regenerate the distribution if we are the client.
+	if len(payload) == seedPacketPayloadLength && conn.isServer {
+		seed, err := drbg.SeedFromBytes(payload)
+		if err != nil {
+			return err
+		}
+		conn.lenDist.Reset(seed)
+		if conn.iatDist != nil {
+			iatSeedSrc := sha256.Sum256(seed.Bytes()[:])
+			iatSeed, err := drbg.SeedFromBytes(iatSeedSrc[:])
+			if err != nil {
+				return err
+			}
+			conn.iatDist.Reset(iatSeed)
 		}
 	}
-
-	// Even if err is set, attempt to do the read anyway so that all decoded
-	// data gets relayed before the connection is torn down.
-	if conn.receiveDecodedBuffer.Len() > 0 {
-		var berr error
-		n, berr = conn.receiveDecodedBuffer.Read(b)
-		if err == nil {
-			// Only propagate berr if there are not more important (fatal)
-			// errors from the network/crypto/packet processing.
-			err = berr
-		}
-	}
-
-	return
+	return nil
 }
 
 func (conn *obfs4Conn) Write(b []byte) (n int, err error) {

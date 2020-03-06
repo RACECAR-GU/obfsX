@@ -28,11 +28,9 @@
 package obfs4
 
 import (
-	"crypto/sha256"
 	"encoding/binary"
 	"fmt"
 
-	"gitlab.com/yawning/obfs4.git/common/drbg"
 	"gitlab.com/yawning/obfs4.git/transports/obfs4/framing"
 	f "gitlab.com/yawning/obfs4.git/common/framing"
 )
@@ -71,70 +69,4 @@ func makePayload(pktType uint8, data []byte, padLen uint16) []byte {
 		copy(payload[f.TypeLength+f.LengthLength+len(data):], zeroPadBytes[:padLen])
 	}
 	return payload
-}
-
-func (conn *obfs4Conn) readPackets() (err error) {
-	// Attempt to read off the network.
-	rdLen, rdErr := conn.Conn.Read(conn.readBuffer)
-	conn.receiveBuffer.Write(conn.readBuffer[:rdLen])
-
-	var decoded [framing.MaximumFramePayloadLength]byte
-	for conn.receiveBuffer.Len() > 0 {
-		// Decrypt an AEAD frame.
-		decLen := 0
-		decLen, err = conn.decoder.Decode(decoded[:], conn.receiveBuffer)
-		if err == f.ErrAgain {
-			break
-		} else if err != nil {
-			break
-		} else if decLen < conn.decoder.PacketOverhead {
-			err = InvalidPacketLengthError(decLen)
-			break
-		}
-
-		// Decode the packet.
-		pkt := decoded[0:decLen]
-		pktType := pkt[0]
-		payloadLen := binary.BigEndian.Uint16(pkt[1:])
-		if int(payloadLen) > len(pkt)-conn.decoder.PacketOverhead {
-			err = f.InvalidPayloadLengthError(int(payloadLen))
-			break
-		}
-		payload := pkt[f.TypeLength + f.LengthLength : f.TypeLength + f.LengthLength+payloadLen]
-
-		switch pktType {
-		case packetTypePayload:
-			if payloadLen > 0 {
-				conn.receiveDecodedBuffer.Write(payload)
-			}
-		case packetTypePrngSeed:
-			// Only regenerate the distribution if we are the client.
-			if len(payload) == seedPacketPayloadLength && !conn.isServer {
-				var seed *drbg.Seed
-				seed, err = drbg.SeedFromBytes(payload)
-				if err != nil {
-					break
-				}
-				conn.lenDist.Reset(seed)
-				if conn.iatDist != nil {
-					iatSeedSrc := sha256.Sum256(seed.Bytes()[:])
-					iatSeed, err := drbg.SeedFromBytes(iatSeedSrc[:])
-					if err != nil {
-						break
-					}
-					conn.iatDist.Reset(iatSeed)
-				}
-			}
-		default:
-			// Ignore unknown packet types.
-		}
-	}
-
-	// Read errors (all fatal) take priority over various frame processing
-	// errors.
-	if rdErr != nil {
-		return rdErr
-	}
-
-	return
 }

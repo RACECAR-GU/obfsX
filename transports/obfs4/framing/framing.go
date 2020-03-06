@@ -199,6 +199,7 @@ func (encoder *ObfsEncoder) encode(frame, payload []byte) (n int, err error) {
 	return len(box), nil
 }
 
+type prngRegenFunc func(payload []byte) error
 // ObfsDecoder is a BaseDecoder instance.
 type ObfsDecoder struct {
 	f.BaseDecoder
@@ -206,7 +207,9 @@ type ObfsDecoder struct {
 	nonce boxNonce
 
 	nextNonce         [nonceLength]byte
+
 	PacketOverhead int
+	PrngRegen prngRegenFunc
 }
 func (decoder *ObfsDecoder) payloadOverhead(_ int) int {
 	return secretbox.Overhead
@@ -224,6 +227,7 @@ func NewObfsDecoder(key []byte) *ObfsDecoder {
 	decoder.Drbg = f.GenDrbg(key[keyLength+noncePrefixLength:])
 	decoder.LengthLength = f.LengthLength
 	decoder.MinPayloadLength = f.LengthLength + f.TypeLength
+	decoder.MaxFramePayloadLength = MaximumFramePayloadLength
 
 	// NextLength is set programatically
 	// NextLengthInvalid is set programatically
@@ -232,13 +236,18 @@ func NewObfsDecoder(key []byte) *ObfsDecoder {
 
 	decoder.DecodeLength = decoder.decodeLength
 	decoder.DecodePayload = decoder.decodePayload
+	decoder.ParsePacket = decoder.parsePacket
 	decoder.Cleanup = decoder.cleanup
+
+	decoder.InitBuffers()
 
 	copy(decoder.key[:], key[0:keyLength])
 	decoder.nonce.init(key[keyLength : keyLength+noncePrefixLength])
 
 	// nextNonce is programatically derived
+
 	decoder.PacketOverhead = f.LengthLength + f.TypeLength
+	// prngRegen is defined in obfs4.go
 
 	return decoder
 }
@@ -274,3 +283,30 @@ func (decoder *ObfsDecoder) cleanup() error {
 	decoder.nonce.counter++
 	return nil
 }
+
+func (decoder *ObfsDecoder) parsePacket(decoded []byte, decLen int) error {
+	// Decode the packet.
+	pkt := decoded[0:decLen]
+	pktType := pkt[0]
+	payloadLen := binary.BigEndian.Uint16(pkt[1:])
+	if int(payloadLen) > len(pkt)-decoder.PacketOverhead {
+		return f.InvalidPayloadLengthError(int(payloadLen))
+	}
+	payload := pkt[f.TypeLength + f.LengthLength : f.TypeLength + f.LengthLength+payloadLen]
+
+	switch pktType {
+		case PacketTypePayload:
+			if payloadLen > 0 {
+				decoder.ReceiveDecodedBuffer.Write(payload)
+			}
+		case PacketTypePrngSeed:
+			err := decoder.PrngRegen(payload)
+			if err != nil {
+				return err
+			}
+		default:
+			// Ignore unknown packet types.
+	}
+	return nil
+}
+

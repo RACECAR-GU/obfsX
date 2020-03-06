@@ -6,6 +6,7 @@ import (
   "fmt"
   "errors"
   "bytes"
+  "net"
   "encoding/binary"
 
   "gitlab.com/yawning/obfs4.git/common/drbg"
@@ -135,20 +136,98 @@ func (encoder *BaseEncoder) Chop(b []byte, pktType uint8) (frameBuf bytes.Buffer
 
 type decodeLengthfunc func(lengthBytes []byte) uint16
 type decodePayloadfunc func(frames *bytes.Buffer) ([]byte, error)
+type parsePacketFunc func(decoded []byte, decLen int) error
 type cleanupfunc func() error
 type BaseDecoder struct {
   Drbg *drbg.HashDrbg
   LengthLength int
-  MinPayloadLength int // TODO: Implement for both!
+  MinPayloadLength int // TODO: Implement for RR
+  PacketOverhead int // TODO: Implement for RR
+  MaxFramePayloadLength int // TODO: Implement for OBFS, RR
 
   NextLength uint16
-  NextLengthInvalid bool // TODO Ensure OBFS works and add to RR
+  NextLengthInvalid bool // TODO add to RR
 
   PayloadOverhead overheadFunc
 
   DecodeLength decodeLengthfunc // TODO: Implement for RR
   DecodePayload decodePayloadfunc // TODO Implement for RR
-  Cleanup cleanupfunc
+  ParsePacket parsePacketFunc // TODO: Implement for RR
+  Cleanup cleanupfunc // TODO: Implement for RR
+
+  ReceiveBuffer        *bytes.Buffer
+  ReceiveDecodedBuffer *bytes.Buffer
+  readBuffer           []byte
+}
+func (decoder *BaseDecoder) InitBuffers() { // TODO: Ensure this is called RR
+  decoder.ReceiveBuffer = bytes.NewBuffer(nil)
+  decoder.ReceiveDecodedBuffer = bytes.NewBuffer(nil)
+  decoder.readBuffer = make([]byte, ConsumeReadSize)
+}
+
+func (decoder *BaseDecoder) Read(b []byte, conn net.Conn) (n int, err error) {
+  // If there is no payload from the previous Read() calls, consume data off
+	// the network.  Not all data received is guaranteed to be usable payload,
+	// so do this in a loop till data is present or an error occurs.
+	for decoder.ReceiveDecodedBuffer.Len() == 0 {
+		err = decoder.readPackets(conn)
+		if err == ErrAgain {
+			// Don't proagate this back up the call stack if we happen to break
+			// out of the loop.
+			err = nil
+			continue
+		} else if err != nil {
+			break
+		}
+	}
+
+	// Even if err is set, attempt to do the read anyway so that all decoded
+	// data gets relayed before the connection is torn down.
+	if decoder.ReceiveDecodedBuffer.Len() > 0 {
+		var berr error
+		n, berr = decoder.ReceiveDecodedBuffer.Read(b)
+		if err == nil {
+			// Only propagate berr if there are not more important (fatal)
+			// errors from the network/crypto/packet processing.
+			err = berr
+		}
+	}
+
+	return
+}
+
+func (decoder *BaseDecoder) readPackets(conn net.Conn) (err error) {
+	// Attempt to read off the network.
+	rdLen, rdErr := conn.Read(decoder.readBuffer)
+	decoder.ReceiveBuffer.Write(decoder.readBuffer[:rdLen])
+
+	decoded := make([]byte, decoder.MaxFramePayloadLength)
+	for decoder.ReceiveBuffer.Len() > 0 {
+		// Decrypt an AEAD frame.
+		decLen := 0
+		decLen, err = decoder.Decode(decoded[:], decoder.ReceiveBuffer)
+		if err == ErrAgain {
+			break
+		} else if err != nil {
+			break
+		} else if decLen < decoder.PacketOverhead {
+			err = InvalidPacketLengthError(decLen)
+			break
+		}
+
+    err = decoder.ParsePacket(decoded, decLen)
+    if err != nil {
+      break
+    }
+	}
+
+	// Read errors (all fatal) take priority over various frame processing
+	// errors.
+	if rdErr != nil {
+		return rdErr
+	}
+
+	return
 }
 
 // Decode decodes a stream of data and returns the length if any.  ErrAgain is
