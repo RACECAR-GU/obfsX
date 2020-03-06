@@ -9,6 +9,7 @@ import (
   "encoding/binary"
 
   "gitlab.com/yawning/obfs4.git/common/drbg"
+  "gitlab.com/yawning/obfs4.git/common/csrand"
 )
 
 const (
@@ -123,6 +124,84 @@ func (encoder *BaseEncoder) Chop(b []byte, pktType uint8) (frameBuf bytes.Buffer
 		}
 	}
 	return
+}
+
+type decodeLengthfunc func(lengthBytes []byte) uint16
+type decodePayloadfunc func(frames *bytes.Buffer) ([]byte, error)
+type cleanupfunc func() error
+type BaseDecoder struct {
+  Drbg *drbg.HashDrbg
+  LengthLength int
+  MinPayloadLength int // TODO: Implement for both!
+
+  NextLength uint16
+  NextLengthInvalid bool // TODO Ensure OBFS works and add to RR
+
+  PayloadOverhead overheadFunc
+
+  DecodeLength decodeLengthfunc // TODO: Implement for RR
+  DecodePayload decodePayloadfunc // TODO Implement for RR
+  Cleanup cleanupfunc
+}
+
+// Decode decodes a stream of data and returns the length if any.  ErrAgain is
+// a temporary failure, all other errors MUST be treated as fatal and the
+// session aborted.
+func (decoder *BaseDecoder) Decode(data []byte, frames *bytes.Buffer) (int, error) {
+
+	// A length of 0 indicates that we do not know how big the next frame is
+	// going to be.
+	if decoder.NextLength == 0 {
+		// Attempt to pull out the next frame length.
+		if decoder.LengthLength > frames.Len() {
+			return 0, ErrAgain
+		}
+
+		lengthlength := make([]byte, decoder.LengthLength)
+	  _, err := io.ReadFull(frames, lengthlength[:])
+	  if err != nil {
+	    return 0, err
+	  }
+	  // Deobfuscate the length field.
+	  length := decoder.DecodeLength(lengthlength) // TODO: Implement for both!!!
+	  lengthMask := decoder.Drbg.NextBlock()
+	  length ^= binary.BigEndian.Uint16(lengthMask)
+	  if MaximumSegmentLength - int(decoder.LengthLength) < int(length) || decoder.MinPayloadLength > int(length) {
+	    // Per "Plaintext Recovery Attacks Against SSH" by
+	    // Martin R. Albrecht, Kenneth G. Paterson and Gaven J. Watson,
+	    // there are a class of attacks againt protocols that use similar
+	    // sorts of framing schemes.
+	    //
+	    // While obfs4 should not allow plaintext recovery (CBC mode is
+	    // not used), attempt to mitigate out of bound frame length errors
+	    // by pretending that the length was a random valid range as per
+	    // the countermeasure suggested by Denis Bider in section 6 of the
+	    // paper.
+
+	    decoder.NextLengthInvalid = true
+	    length = uint16(csrand.IntRange(decoder.MinPayloadLength, MaximumSegmentLength - int(decoder.LengthLength)))
+	  }
+	  decoder.NextLength = length
+	}
+
+	if int(decoder.NextLength) > frames.Len() {
+		return 0, ErrAgain
+	}
+
+  decodedPayload, err := decoder.DecodePayload(frames)
+	if err != nil {
+		return 0, err
+	}
+	copy(data[0:len(decodedPayload)], decodedPayload[:])
+
+	if decoder.NextLengthInvalid {
+		// When a random length is used be paranoid.
+		return 0, ErrTagMismatch
+	}
+
+	// Clean up and prepare for the next frame.
+	decoder.NextLength = 0
+	return len(decodedPayload), decoder.Cleanup() // TODO: Implement for both!
 }
 
 // GenDrbg creates a *drbg.HashDrbg with some safety checks

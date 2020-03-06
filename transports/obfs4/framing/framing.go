@@ -67,7 +67,6 @@ import (
 	"fmt"
 	"io"
 
-	"gitlab.com/yawning/obfs4.git/common/csrand"
 	"gitlab.com/yawning/obfs4.git/common/drbg"
 	f "gitlab.com/yawning/obfs4.git/common/framing"
 	"golang.org/x/crypto/nacl/secretbox"
@@ -149,27 +148,24 @@ func (encoder *ObfsEncoder) processLength(length uint16) []byte {
 // containing exactly KeyLength bytes of keying material.
 func NewObfsEncoder(key []byte) *ObfsEncoder {
 
-	encoder := new(ObfsEncoder)
-
 	if len(key) != KeyLength {
 		panic(fmt.Sprintf("BUG: Invalid encoder key length: %d", len(key)))
 	}
 
-	copy(encoder.key[:], key[0:keyLength])
-
-	encoder.nonce.init(key[keyLength : keyLength+noncePrefixLength])
-
-	encoder.PacketOverhead = f.LengthLength + f.TypeLength
+	encoder := new(ObfsEncoder)
 
 	encoder.Drbg = f.GenDrbg(key[keyLength+noncePrefixLength:])
 	// encoder.MaxPacketPayloadLength is set in obfs4.go
 	encoder.LengthLength = 2
-
 	encoder.PayloadOverhead = encoder.payloadOverhead
 
 	encoder.Encode = encoder.encode
 	encoder.ProcessLength = encoder.processLength
 	// encoder.ChopPayload is set in obfs4.go
+
+	copy(encoder.key[:], key[0:keyLength])
+	encoder.nonce.init(key[keyLength : keyLength+noncePrefixLength])
+	encoder.PacketOverhead = f.LengthLength + f.TypeLength
 
 	return encoder
 }
@@ -198,102 +194,78 @@ func (encoder *ObfsEncoder) encode(frame, payload []byte) (n int, err error) {
 	return len(box), nil
 }
 
-// Decoder is a frame decoder instance.
-type Decoder struct {
+// ObfsDecoder is a BaseDecoder instance.
+type ObfsDecoder struct {
+	f.BaseDecoder
 	key   [keyLength]byte
 	nonce boxNonce
-	drbg  *drbg.HashDrbg
 
 	nextNonce         [nonceLength]byte
-	nextLength        uint16
-	nextLengthInvalid bool
+	PacketOverhead int
+}
+func (encoder *ObfsDecoder) payloadOverhead(_ int) int {
+	return secretbox.Overhead
 }
 
-// NewDecoder creates a new Decoder instance.  It must be supplied a slice
+// NewObfsDecoder creates a new ObfsDecoder instance.  It must be supplied a slice
 // containing exactly KeyLength bytes of keying material.
-func NewDecoder(key []byte) *Decoder {
+func NewObfsDecoder(key []byte) *ObfsDecoder {
 	if len(key) != KeyLength {
 		panic(fmt.Sprintf("BUG: Invalid decoder key length: %d", len(key)))
 	}
 
-	decoder := new(Decoder)
+	decoder := new(ObfsDecoder)
+
+	decoder.Drbg = f.GenDrbg(key[keyLength+noncePrefixLength:])
+	decoder.LengthLength = f.LengthLength
+	decoder.MinPayloadLength = f.LengthLength + f.TypeLength
+
+	// NextLength is set programatically
+	// NextLengthInvalid is set programatically
+
+	decoder.PayloadOverhead = decoder.payloadOverhead
+
+	decoder.DecodeLength = decoder.decodeLength
+	decoder.DecodePayload = decoder.decodePayload
+	decoder.Cleanup = decoder.cleanup
+
 	copy(decoder.key[:], key[0:keyLength])
 	decoder.nonce.init(key[keyLength : keyLength+noncePrefixLength])
-	seed, err := drbg.SeedFromBytes(key[keyLength+noncePrefixLength:])
-	if err != nil {
-		panic(fmt.Sprintf("BUG: Failed to initialize DRBG: %s", err))
-	}
-	decoder.drbg, _ = drbg.NewHashDrbg(seed)
+
+	// nextNonce is programatically derived
+	decoder.PacketOverhead = f.LengthLength + f.TypeLength
 
 	return decoder
 }
 
-// Decode decodes a stream of data and returns the length if any.  ErrAgain is
-// a temporary failure, all other errors MUST be treated as fatal and the
-// session aborted.
-func (decoder *Decoder) Decode(data []byte, frames *bytes.Buffer) (int, error) {
-	// A length of 0 indicates that we do not know how big the next frame is
-	// going to be.
-	if decoder.nextLength == 0 {
-		// Attempt to pull out the next frame length.
-		if f.LengthLength > frames.Len() {
-			return 0, f.ErrAgain
-		}
+func (decoder *ObfsDecoder) decodeLength(lengthBytes []byte) uint16 {
+	return binary.BigEndian.Uint16(lengthBytes[:decoder.LengthLength])
+}
 
-		// Remove the length field from the buffer.
-		var obfsLen [f.LengthLength]byte
-		_, err := io.ReadFull(frames, obfsLen[:])
-		if err != nil {
-			return 0, err
-		}
-
-		// Derive the nonce the peer used.
-		if err = decoder.nonce.bytes(&decoder.nextNonce); err != nil {
-			return 0, err
-		}
-
-		// Deobfuscate the length field.
-		length := binary.BigEndian.Uint16(obfsLen[:])
-		lengthMask := decoder.drbg.NextBlock()
-		length ^= binary.BigEndian.Uint16(lengthMask)
-		if f.MaxFrameLength < length || minFrameLength > length {
-			// Per "Plaintext Recovery Attacks Against SSH" by
-			// Martin R. Albrecht, Kenneth G. Paterson and Gaven J. Watson,
-			// there are a class of attacks againt protocols that use similar
-			// sorts of framing schemes.
-			//
-			// While obfs4 should not allow plaintext recovery (CBC mode is
-			// not used), attempt to mitigate out of bound frame length errors
-			// by pretending that the length was a random valid range as per
-			// the countermeasure suggested by Denis Bider in section 6 of the
-			// paper.
-
-			decoder.nextLengthInvalid = true
-			length = uint16(csrand.IntRange(minFrameLength, f.MaxFrameLength))
-		}
-		decoder.nextLength = length
-	}
-
-	if int(decoder.nextLength) > frames.Len() {
-		return 0, f.ErrAgain
+func (decoder *ObfsDecoder) decodePayload(frames *bytes.Buffer) ([]byte, error) {
+	// Derive the nonce the peer used.
+	err := decoder.nonce.bytes(&decoder.nextNonce)
+	if err != nil {
+		return nil, err
 	}
 
 	// Unseal the frame.
-	var box [f.MaxFrameLength]byte
-	n, err := io.ReadFull(frames, box[:decoder.nextLength])
+	maximumPayloadLength := f.MaximumSegmentLength - decoder.LengthLength
+	box := make([]byte, maximumPayloadLength)
+	holder := make([]byte, maximumPayloadLength) // TODO: Could be the max payload length
+	n, err := io.ReadFull(frames, box[:decoder.NextLength])
 	if err != nil {
-		return 0, err
+		return nil, err
 	}
-	out, ok := secretbox.Open(data[:0], box[:n], &decoder.nextNonce, &decoder.key)
-	if !ok || decoder.nextLengthInvalid {
-		// When a random length is used (on length error) the tag should always
-		// mismatch, but be paranoid.
-		return 0, f.ErrTagMismatch
+	decodedPayload, ok := secretbox.Open(holder[:0], box[:n], &decoder.nextNonce, &decoder.key)
+	if !ok {
+		return nil, f.ErrTagMismatch
 	}
 
-	// Clean up and prepare for the next frame.
-	decoder.nextLength = 0
+	return decodedPayload, nil
+}
+
+func (decoder *ObfsDecoder) cleanup() error {
 	decoder.nonce.counter++
-
-	return len(out), nil
+	return nil
 }

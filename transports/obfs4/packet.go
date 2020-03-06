@@ -100,7 +100,7 @@ func (conn *obfs4Conn) readPackets() (err error) {
 			break
 		} else if err != nil {
 			break
-		} else if decLen < packetOverhead {
+		} else if decLen < conn.decoder.PacketOverhead {
 			err = InvalidPacketLengthError(decLen)
 			break
 		}
@@ -109,7 +109,7 @@ func (conn *obfs4Conn) readPackets() (err error) {
 		pkt := decoded[0:decLen]
 		pktType := pkt[0]
 		payloadLen := binary.BigEndian.Uint16(pkt[1:])
-		if int(payloadLen) > len(pkt)-packetOverhead {
+		if int(payloadLen) > len(pkt)-conn.decoder.PacketOverhead {
 			err = f.InvalidPayloadLengthError(int(payloadLen))
 			break
 		}
