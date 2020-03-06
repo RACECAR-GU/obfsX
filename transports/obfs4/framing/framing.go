@@ -93,6 +93,11 @@ const (
 	nonceLength        = noncePrefixLength + nonceCounterLength
 )
 
+const (
+	PacketTypePayload = iota
+	PacketTypePrngSeed
+)
+
 // Error returned when the NaCl secretbox nonce's counter wraps (FATAL).
 var ErrNonceCounterWrapped = errors.New("framing: Nonce counter wrapped")
 
@@ -203,7 +208,7 @@ type ObfsDecoder struct {
 	nextNonce         [nonceLength]byte
 	PacketOverhead int
 }
-func (encoder *ObfsDecoder) payloadOverhead(_ int) int {
+func (decoder *ObfsDecoder) payloadOverhead(_ int) int {
 	return secretbox.Overhead
 }
 

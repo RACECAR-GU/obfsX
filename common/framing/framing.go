@@ -42,6 +42,13 @@ func (e InvalidPayloadLengthError) Error() string {
 	return fmt.Sprintf("framing: Invalid payload length: %d", int(e))
 }
 
+// InvalidPacketLengthError is the error returned when decodePacket detects a
+// invalid packet length/
+type InvalidPacketLengthError int
+func (e InvalidPacketLengthError) Error() string {
+	return fmt.Sprintf("packet: Invalid packet length: %d", int(e))
+}
+
 /*
 func Gendrbg(key []byte) (*drbg.HashDrbg, error) {
   seed, err := drbg.SeedFromBytes(key)
@@ -163,7 +170,7 @@ func (decoder *BaseDecoder) Decode(data []byte, frames *bytes.Buffer) (int, erro
 	    return 0, err
 	  }
 	  // Deobfuscate the length field.
-	  length := decoder.DecodeLength(lengthlength) // TODO: Implement for both!!!
+	  length := decoder.DecodeLength(lengthlength)
 	  lengthMask := decoder.Drbg.NextBlock()
 	  length ^= binary.BigEndian.Uint16(lengthMask)
 	  if MaximumSegmentLength - int(decoder.LengthLength) < int(length) || decoder.MinPayloadLength > int(length) {
@@ -201,7 +208,7 @@ func (decoder *BaseDecoder) Decode(data []byte, frames *bytes.Buffer) (int, erro
 
 	// Clean up and prepare for the next frame.
 	decoder.NextLength = 0
-	return len(decodedPayload), decoder.Cleanup() // TODO: Implement for both!
+	return len(decodedPayload), decoder.Cleanup()
 }
 
 // GenDrbg creates a *drbg.HashDrbg with some safety checks

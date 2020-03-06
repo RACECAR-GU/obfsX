@@ -43,19 +43,6 @@ const (
 	seedPacketPayloadLength = seedLength
 )
 
-const (
-	packetTypePayload = iota
-	packetTypePrngSeed
-)
-
-// InvalidPacketLengthError is the error returned when decodePacket detects a
-// invalid packet length/
-type InvalidPacketLengthError int
-
-func (e InvalidPacketLengthError) Error() string {
-	return fmt.Sprintf("packet: Invalid packet length: %d", int(e))
-}
-
 var zeroPadBytes [maxPacketPayloadLength]byte
 
 func makeUnpaddedPayload(pktType uint8, data []byte) []byte {
