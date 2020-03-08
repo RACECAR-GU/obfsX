@@ -123,7 +123,7 @@ func newRiverrunEncoder(key []byte, writeStream cipher.Stream, table8, table16 [
   encoder := new(riverrunEncoder)
 
 	encoder.Drbg = f.GenDrbg(key[:])
-  encoder.MaxPacketPayloadLength = int(f.MaximumSegmentLength - ctstretch.ExpandedNBytes(uint64(f.LengthLength), compressedBlockBits, expandedBlockBits))
+  encoder.MaxPacketPayloadLength = int(ctstretch.CompressedNBytes(f.MaximumSegmentLength - ctstretch.ExpandedNBytes(uint64(f.LengthLength), compressedBlockBits, expandedBlockBits), expandedBlockBits, compressedBlockBits))
   encoder.LengthLength = int(ctstretch.ExpandedNBytes(uint64(f.LengthLength), compressedBlockBits, expandedBlockBits))
   encoder.PayloadOverhead = encoder.payloadOverhead
 
