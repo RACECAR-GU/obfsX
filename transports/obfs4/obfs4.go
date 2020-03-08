@@ -50,7 +50,7 @@ import (
 	"gitlab.com/yawning/obfs4.git/common/replayfilter"
 	"gitlab.com/yawning/obfs4.git/transports/base"
 	"gitlab.com/yawning/obfs4.git/transports/obfs4/framing"
-	//"gitlab.com/yawning/obfs4.git/transports/sharknado"
+	"gitlab.com/yawning/obfs4.git/transports/sharknado"
 	"gitlab.com/yawning/obfs4.git/transports/riverrun"
 	f "gitlab.com/yawning/obfs4.git/common/framing"
 )
@@ -343,7 +343,7 @@ func newObfs4ClientConn(conn net.Conn, args *obfs4ClientArgs) (c *obfs4Conn, err
 	if err != nil {
 		return nil, err
 	}
-	//c.Conn = sharknado.NewSharknadoConn(c.Conn, c.getDummyTraffic, serverSeed)
+	c.Conn = sharknado.NewSharknadoConn(c.Conn, c.getDummyTraffic, serverSeed)
 
 	// Start the handshake timeout.
 	deadline := time.Now().Add(clientHandshakeTimeout)
