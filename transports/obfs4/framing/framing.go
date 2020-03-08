@@ -65,7 +65,6 @@ import (
 	"encoding/binary"
 	"errors"
 	"fmt"
-	"io"
 
 	"gitlab.com/yawning/obfs4.git/common/drbg"
 	f "gitlab.com/yawning/obfs4.git/common/framing"
@@ -142,10 +141,10 @@ func (encoder *ObfsEncoder) payloadOverhead(_ int) int {
 	return secretbox.Overhead
 }
 
-func (encoder *ObfsEncoder) processLength(length uint16) []byte {
+func (encoder *ObfsEncoder) processLength(length uint16) ([]byte, error) {
 	lengthBytes := make([]byte, encoder.LengthLength)
 	binary.BigEndian.PutUint16(lengthBytes[:], length)
-	return lengthBytes
+	return lengthBytes, nil
 }
 
 
@@ -252,8 +251,8 @@ func NewObfsDecoder(key []byte) *ObfsDecoder {
 	return decoder
 }
 
-func (decoder *ObfsDecoder) decodeLength(lengthBytes []byte) uint16 {
-	return binary.BigEndian.Uint16(lengthBytes[:decoder.LengthLength])
+func (decoder *ObfsDecoder) decodeLength(lengthBytes []byte) (uint16, error) {
+	return binary.BigEndian.Uint16(lengthBytes[:decoder.LengthLength]), nil
 }
 
 func (decoder *ObfsDecoder) decodePayload(frames *bytes.Buffer) ([]byte, error) {
@@ -263,15 +262,15 @@ func (decoder *ObfsDecoder) decodePayload(frames *bytes.Buffer) ([]byte, error) 
 		return nil, err
 	}
 
-	// Unseal the frame.
-	maximumPayloadLength := f.MaximumSegmentLength - decoder.LengthLength
-	box := make([]byte, maximumPayloadLength)
-	holder := make([]byte, maximumPayloadLength) // TODO: Could be the max payload length
-	n, err := io.ReadFull(frames, box[:decoder.NextLength])
+	//var frame []byte
+	//var frameLen int
+	frameLen, frame, err := decoder.GetFrame(frames)
 	if err != nil {
 		return nil, err
 	}
-	decodedPayload, ok := secretbox.Open(holder[:0], box[:n], &decoder.nextNonce, &decoder.key)
+
+	holder := make([]byte, decoder.MaxFramePayloadLength)
+	decodedPayload, ok := secretbox.Open(holder[:0], frame[:frameLen], &decoder.nextNonce, &decoder.key)
 	if !ok {
 		return nil, f.ErrTagMismatch
 	}
@@ -292,7 +291,7 @@ func (decoder *ObfsDecoder) parsePacket(decoded []byte, decLen int) error {
 	if int(payloadLen) > len(pkt)-decoder.PacketOverhead {
 		return f.InvalidPayloadLengthError(int(payloadLen))
 	}
-	payload := pkt[f.TypeLength + f.LengthLength : f.TypeLength + f.LengthLength+payloadLen]
+	payload := pkt[decoder.PacketOverhead : decoder.PacketOverhead + int(payloadLen)]
 
 	switch pktType {
 		case PacketTypePayload:

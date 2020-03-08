@@ -63,17 +63,17 @@ func Gendrbg(key []byte) (*drbg.HashDrbg, error) {
 type encodeFunc func(frame, payload []byte) (n int, err error)
 type chopPayloadFunc func(pktType uint8, payload []byte) []byte
 type overheadFunc func(payloadLen int) int
-type processLengthFunc func(length uint16) []byte
+type processLengthFunc func(length uint16) ([]byte, error)
 
 // BaseEncoder implements the core encoder vars and functions
 type BaseEncoder struct {
   Drbg *drbg.HashDrbg
-  MaxPacketPayloadLength int // TODO: Check + maybe Implement for RR
-  LengthLength int // TODO: Implement for RR
+  MaxPacketPayloadLength int
+  LengthLength int
   PayloadOverhead overheadFunc
 
   Encode encodeFunc
-  ProcessLength processLengthFunc  // TODO: Build for RR
+  ProcessLength processLengthFunc
   ChopPayload chopPayloadFunc
 }
 
@@ -90,7 +90,11 @@ func (encoder *BaseEncoder) MakePacket(w io.Writer, payload []byte) error {
   length := uint16(payloadLenWithOverhead0)
   lengthMask := encoder.Drbg.NextBlock()
 	length ^= binary.BigEndian.Uint16(lengthMask)
-	copy(frame[:encoder.LengthLength], encoder.ProcessLength(length))
+  processedLength, err := encoder.ProcessLength(length)
+  if err != nil {
+    return err
+  }
+	copy(frame[:encoder.LengthLength], processedLength)
   frameLen := encoder.LengthLength + payloadLenWithOverhead0
 	payloadLenWithOverhead1, err := encoder.Encode(frame[encoder.LengthLength:], payload[:payloadLen])
 	if err != nil {
@@ -134,35 +138,45 @@ func (encoder *BaseEncoder) Chop(b []byte, pktType uint8) (frameBuf bytes.Buffer
 	return
 }
 
-type decodeLengthfunc func(lengthBytes []byte) uint16
+type decodeLengthfunc func(lengthBytes []byte) (uint16, error)
 type decodePayloadfunc func(frames *bytes.Buffer) ([]byte, error)
 type parsePacketFunc func(decoded []byte, decLen int) error
 type cleanupfunc func() error
 type BaseDecoder struct {
   Drbg *drbg.HashDrbg
   LengthLength int
-  MinPayloadLength int // TODO: Implement for RR
-  PacketOverhead int // TODO: Implement for RR
-  MaxFramePayloadLength int // TODO: Implement for OBFS, RR
+  MinPayloadLength int
+  PacketOverhead int
+  MaxFramePayloadLength int
 
   NextLength uint16
-  NextLengthInvalid bool // TODO add to RR
+  NextLengthInvalid bool
 
   PayloadOverhead overheadFunc
 
-  DecodeLength decodeLengthfunc // TODO: Implement for RR
-  DecodePayload decodePayloadfunc // TODO Implement for RR
-  ParsePacket parsePacketFunc // TODO: Implement for RR
-  Cleanup cleanupfunc // TODO: Implement for RR
+  DecodeLength decodeLengthfunc
+  DecodePayload decodePayloadfunc
+  ParsePacket parsePacketFunc
+  Cleanup cleanupfunc
 
   ReceiveBuffer        *bytes.Buffer
   ReceiveDecodedBuffer *bytes.Buffer
   readBuffer           []byte
 }
-func (decoder *BaseDecoder) InitBuffers() { // TODO: Ensure this is called RR
+func (decoder *BaseDecoder) InitBuffers() {
   decoder.ReceiveBuffer = bytes.NewBuffer(nil)
   decoder.ReceiveDecodedBuffer = bytes.NewBuffer(nil)
   decoder.readBuffer = make([]byte, ConsumeReadSize)
+}
+
+func (decoder *BaseDecoder) GetFrame(frames *bytes.Buffer) (int, []byte, error) {
+	maximumPayloadLength := MaximumSegmentLength - decoder.LengthLength
+  singleFrame := make([]byte, maximumPayloadLength)
+  n, err := io.ReadFull(frames, singleFrame[:decoder.NextLength])
+	if err != nil {
+		return 0, nil, err
+	}
+	return n, singleFrame, nil
 }
 
 func (decoder *BaseDecoder) Read(b []byte, conn net.Conn) (n int, err error) {
@@ -249,7 +263,10 @@ func (decoder *BaseDecoder) Decode(data []byte, frames *bytes.Buffer) (int, erro
 	    return 0, err
 	  }
 	  // Deobfuscate the length field.
-	  length := decoder.DecodeLength(lengthlength)
+	  length, err := decoder.DecodeLength(lengthlength)
+    if err != nil {
+      return 0, err
+    }
 	  lengthMask := decoder.Drbg.NextBlock()
 	  length ^= binary.BigEndian.Uint16(lengthMask)
 	  if MaximumSegmentLength - int(decoder.LengthLength) < int(length) || decoder.MinPayloadLength > int(length) {
