@@ -52,6 +52,7 @@ import (
 	"gitlab.com/yawning/obfs4.git/transports/obfs4/framing"
 	//"gitlab.com/yawning/obfs4.git/transports/sharknado"
 	"gitlab.com/yawning/obfs4.git/transports/riverrun"
+	f "gitlab.com/yawning/obfs4.git/common/framing"
 )
 
 const (
@@ -267,7 +268,7 @@ func (sf *obfs4ServerFactory) WrapConn(conn net.Conn) (net.Conn, error) {
 		return nil, err
 	}
 
-	lenDist := probdist.New(sf.lenSeed, 0, framing.MaximumSegmentLength, biasedDist)
+	lenDist := probdist.New(sf.lenSeed, 0, f.MaximumSegmentLength, biasedDist)
 	var iatDist *probdist.WeightedDist
 	if sf.iatSeed != nil {
 		iatDist = probdist.New(sf.iatSeed, 0, maxIATDelay, biasedDist)
@@ -281,7 +282,7 @@ func (sf *obfs4ServerFactory) WrapConn(conn net.Conn) (net.Conn, error) {
 	if err != nil {
 		return nil, err
 	}
-	c := &obfs4Conn{conn, true, lenDist, iatDist, sf.iatMode, bytes.NewBuffer(nil), bytes.NewBuffer(nil), make([]byte, consumeReadSize), nil, nil, false}
+	c := &obfs4Conn{conn, true, lenDist, iatDist, sf.iatMode, nil, nil, false}
 	c.Conn, err = riverrun.NewRiverrunConn(c.Conn, c.isServer, serverSeed)
 	if err != nil {
 		return nil, err
@@ -306,12 +307,8 @@ type obfs4Conn struct {
 	iatDist *probdist.WeightedDist
 	iatMode int
 
-	receiveBuffer        *bytes.Buffer
-	receiveDecodedBuffer *bytes.Buffer
-	readBuffer           []byte
-
-	encoder *framing.Encoder
-	decoder *framing.Decoder
+	encoder *framing.ObfsEncoder
+	decoder *framing.ObfsDecoder
 
 	connEstablished bool
 }
@@ -322,7 +319,7 @@ func newObfs4ClientConn(conn net.Conn, args *obfs4ClientArgs) (c *obfs4Conn, err
 	if seed, err = drbg.NewSeed(); err != nil {
 		return
 	}
-	lenDist := probdist.New(seed, 0, framing.MaximumSegmentLength, biasedDist)
+	lenDist := probdist.New(seed, 0, f.MaximumSegmentLength, biasedDist)
 	var iatDist *probdist.WeightedDist
 	if args.iatMode != iatNone {
 		var iatSeed *drbg.Seed
@@ -341,7 +338,7 @@ func newObfs4ClientConn(conn net.Conn, args *obfs4ClientArgs) (c *obfs4Conn, err
 	}
 
 	// Allocate the client structure.
-	c = &obfs4Conn{conn, false, lenDist, iatDist, args.iatMode, bytes.NewBuffer(nil), bytes.NewBuffer(nil), make([]byte, consumeReadSize), nil, nil, false}
+	c = &obfs4Conn{conn, false, lenDist, iatDist, args.iatMode, nil, nil, false}
 	c.Conn, err = riverrun.NewRiverrunConn(c.Conn, c.isServer, serverSeed)
 	if err != nil {
 		return nil, err
@@ -383,6 +380,7 @@ func (conn *obfs4Conn) clientHandshake(nodeID *ntor.NodeID, peerIdentityKey *nto
 
 	// Consume the server handshake.
 	var hsBuf [maxHandshakeLength]byte
+	receiveBuffer := bytes.NewBuffer(nil)
 	for {
 		n, err := conn.Conn.Read(hsBuf[:])
 		if err != nil {
@@ -390,24 +388,38 @@ func (conn *obfs4Conn) clientHandshake(nodeID *ntor.NodeID, peerIdentityKey *nto
 			// no point in continuing on an EOF or whatever.
 			return err
 		}
-		conn.receiveBuffer.Write(hsBuf[:n])
+		receiveBuffer.Write(hsBuf[:n])
 
-		n, seed, err := hs.parseServerHandshake(conn.receiveBuffer.Bytes())
+		n, seed, err := hs.parseServerHandshake(receiveBuffer.Bytes())
 		if err == ErrMarkNotFoundYet {
 			continue
 		} else if err != nil {
 			return err
 		}
-		_ = conn.receiveBuffer.Next(n)
+		_ = receiveBuffer.Next(n)
 
 		// Use the derived key material to intialize the link crypto.
 		okm := ntor.Kdf(seed, framing.KeyLength*2)
-		conn.encoder = framing.NewEncoder(okm[:framing.KeyLength])
-		conn.decoder = framing.NewDecoder(okm[framing.KeyLength:])
+		conn.encoder = newEncoder(okm[:framing.KeyLength])
+		conn.newDecoder(okm[framing.KeyLength:])
+		conn.decoder.ReceiveBuffer = receiveBuffer
 		conn.connEstablished = true
 
 		return nil
 	}
+}
+
+func newEncoder(key []byte) *framing.ObfsEncoder {
+	encoder := framing.NewObfsEncoder(key)
+	encoder.ChopPayload = makeUnpaddedPayload
+	encoder.MaxPacketPayloadLength = maxPacketPayloadLength
+	return encoder
+}
+
+func (conn *obfs4Conn) newDecoder(key []byte) {
+	decoder := framing.NewObfsDecoder(key)
+	decoder.PrngRegen = conn.prngRegen
+	conn.decoder = decoder
 }
 
 func (conn *obfs4Conn) serverHandshake(sf *obfs4ServerFactory, sessionKey *ntor.Keypair) error {
@@ -423,6 +435,7 @@ func (conn *obfs4Conn) serverHandshake(sf *obfs4ServerFactory, sessionKey *ntor.
 
 	// Consume the client handshake.
 	var hsBuf [maxHandshakeLength]byte
+	receiveBuffer := bytes.NewBuffer(nil)
 	for {
 		n, err := conn.Conn.Read(hsBuf[:])
 		if err != nil {
@@ -430,15 +443,15 @@ func (conn *obfs4Conn) serverHandshake(sf *obfs4ServerFactory, sessionKey *ntor.
 			// no point in continuing on an EOF or whatever.
 			return err
 		}
-		conn.receiveBuffer.Write(hsBuf[:n])
+		receiveBuffer.Write(hsBuf[:n])
 
-		seed, err := hs.parseClientHandshake(sf.replayFilter, conn.receiveBuffer.Bytes())
+		seed, err := hs.parseClientHandshake(sf.replayFilter, receiveBuffer.Bytes())
 		if err == ErrMarkNotFoundYet {
 			continue
 		} else if err != nil {
 			return err
 		}
-		conn.receiveBuffer.Reset()
+		receiveBuffer.Reset()
 
 		if err := conn.Conn.SetDeadline(time.Time{}); err != nil {
 			return nil
@@ -446,8 +459,8 @@ func (conn *obfs4Conn) serverHandshake(sf *obfs4ServerFactory, sessionKey *ntor.
 
 		// Use the derived key material to intialize the link crypto.
 		okm := ntor.Kdf(seed, framing.KeyLength*2)
-		conn.encoder = framing.NewEncoder(okm[framing.KeyLength:])
-		conn.decoder = framing.NewDecoder(okm[:framing.KeyLength])
+		conn.encoder = newEncoder(okm[framing.KeyLength:])
+		conn.decoder = framing.NewObfsDecoder(okm[:framing.KeyLength])
 
 		break
 	}
@@ -472,7 +485,7 @@ func (conn *obfs4Conn) serverHandshake(sf *obfs4ServerFactory, sessionKey *ntor.
 	}
 
 	// Send the PRNG seed as the first packet.
-	if err := conn.makePacket(&frameBuf, packetTypePrngSeed, sf.lenSeed.Bytes()[:], 0); err != nil {
+	if err := conn.encoder.MakePacket(&frameBuf, makePayload(framing.PacketTypePrngSeed, sf.lenSeed.Bytes()[:], 0)); err != nil {
 		return err
 	}
 	if _, err = conn.Conn.Write(frameBuf.Bytes()); err != nil {
@@ -484,57 +497,33 @@ func (conn *obfs4Conn) serverHandshake(sf *obfs4ServerFactory, sessionKey *ntor.
 }
 
 func (conn *obfs4Conn) Read(b []byte) (n int, err error) {
-	// If there is no payload from the previous Read() calls, consume data off
-	// the network.  Not all data received is guaranteed to be usable payload,
-	// so do this in a loop till data is present or an error occurs.
-	for conn.receiveDecodedBuffer.Len() == 0 {
-		err = conn.readPackets()
-		if err == framing.ErrAgain {
-			// Don't proagate this back up the call stack if we happen to break
-			// out of the loop.
-			err = nil
-			continue
-		} else if err != nil {
-			break
+	return conn.decoder.Read(b, conn.Conn)
+}
+func (conn *obfs4Conn) prngRegen(payload []byte) error {
+	// Only regenerate the distribution if we are the client.
+	if len(payload) == seedPacketPayloadLength && conn.isServer {
+		seed, err := drbg.SeedFromBytes(payload)
+		if err != nil {
+			return err
+		}
+		conn.lenDist.Reset(seed)
+		if conn.iatDist != nil {
+			iatSeedSrc := sha256.Sum256(seed.Bytes()[:])
+			iatSeed, err := drbg.SeedFromBytes(iatSeedSrc[:])
+			if err != nil {
+				return err
+			}
+			conn.iatDist.Reset(iatSeed)
 		}
 	}
-
-	// Even if err is set, attempt to do the read anyway so that all decoded
-	// data gets relayed before the connection is torn down.
-	if conn.receiveDecodedBuffer.Len() > 0 {
-		var berr error
-		n, berr = conn.receiveDecodedBuffer.Read(b)
-		if err == nil {
-			// Only propagate berr if there are not more important (fatal)
-			// errors from the network/crypto/packet processing.
-			err = berr
-		}
-	}
-
-	return
+	return nil
 }
 
 func (conn *obfs4Conn) Write(b []byte) (n int, err error) {
-	chopBuf := bytes.NewBuffer(b)
-	var payload [maxPacketPayloadLength]byte
 	var frameBuf bytes.Buffer
-
-	// Chop the pending data into payload frames.
-	for chopBuf.Len() > 0 {
-		// Send maximum sized frames.
-		rdLen := 0
-		rdLen, err = chopBuf.Read(payload[:])
-		if err != nil {
-			return 0, err
-		} else if rdLen == 0 {
-			panic(fmt.Sprintf("BUG: Write(), chopping length was 0"))
-		}
-		n += rdLen
-
-		err = conn.makePacket(&frameBuf, packetTypePayload, payload[:rdLen], 0)
-		if err != nil {
-			return 0, err
-		}
+	frameBuf, n, err = conn.encoder.Chop(b, framing.PacketTypePayload)
+	if err != nil {
+		return
 	}
 
 	if conn.iatMode != iatParanoid {
@@ -550,7 +539,7 @@ func (conn *obfs4Conn) Write(b []byte) (n int, err error) {
 	// frameBuf around.  In theory, write timeouts and whatnot could be
 	// supported if this wasn't the case, but that complicates the code.
 	if conn.iatMode != iatNone {
-		var iatFrame [framing.MaximumSegmentLength]byte
+		var iatFrame [f.MaximumSegmentLength]byte
 		for frameBuf.Len() > 0 {
 			iatWrLen := 0
 
@@ -634,29 +623,26 @@ func (conn *obfs4Conn) closeAfterDelay(sf *obfs4ServerFactory, startTime time.Ti
 }
 
 func (conn *obfs4Conn) padBurst(burst *bytes.Buffer, toPadTo int) (err error) {
-	tailLen := burst.Len() % framing.MaximumSegmentLength
+	tailLen := burst.Len() % f.MaximumSegmentLength
 
 	padLen := 0
 	if toPadTo >= tailLen {
 		padLen = toPadTo - tailLen
 	} else {
-		padLen = (framing.MaximumSegmentLength - tailLen) + toPadTo
+		padLen = (f.MaximumSegmentLength - tailLen) + toPadTo
 	}
 
 	if padLen > headerLength {
-		err = conn.makePacket(burst, packetTypePayload, []byte{},
-			uint16(padLen-headerLength))
+		err = conn.encoder.MakePacket(burst, makePayload(framing.PacketTypePayload, []byte{}, uint16(padLen-headerLength)))
 		if err != nil {
 			return
 		}
 	} else if padLen > 0 {
-		err = conn.makePacket(burst, packetTypePayload, []byte{},
-			maxPacketPayloadLength)
+		err = conn.encoder.MakePacket(burst, makePayload(framing.PacketTypePayload, []byte{}, uint16(conn.encoder.MaxPacketPayloadLength)))
 		if err != nil {
 			return
 		}
-		err = conn.makePacket(burst, packetTypePayload, []byte{},
-			uint16(padLen))
+		err = conn.encoder.MakePacket(burst, makePayload(framing.PacketTypePayload, []byte{}, uint16(padLen)))
 		if err != nil {
 			return
 		}
@@ -675,14 +661,14 @@ func (conn *obfs4Conn) getDummyTraffic(n int) ([]byte, error) {
 		return nil, fmt.Errorf("Connection not yet established.  No dummy traffic available.")
 	}
 
-	var overhead = framing.FrameOverhead + packetOverhead
+	var overhead = framing.FrameOverhead + conn.encoder.PacketOverhead
 	var frameBuf bytes.Buffer
-	for n > maxPacketPaddingLength {
-		err := conn.makePacket(&frameBuf, packetTypePayload, nil, maxPacketPaddingLength)
+	for n > conn.encoder.MaxPacketPayloadLength {
+		err := conn.encoder.MakePacket(&frameBuf, makePayload(framing.PacketTypePayload, nil, uint16(conn.encoder.MaxPacketPayloadLength)))
 		if err != nil {
 			return nil, err
 		}
-		n -= maxPacketPayloadLength + overhead
+		n -= conn.encoder.MaxPacketPayloadLength + overhead
 	}
 	// Do we have enough remaining padding to fit it into a new frame?  If not,
 	// let's just create an empty frame.
@@ -690,7 +676,7 @@ func (conn *obfs4Conn) getDummyTraffic(n int) ([]byte, error) {
 		log.Debugf("Remaining n < frame overhead.")
 		n = overhead
 	}
-	err := conn.makePacket(&frameBuf, packetTypePayload, nil, uint16(n-overhead))
+	err := conn.encoder.MakePacket(&frameBuf, makePayload(framing.PacketTypePayload, nil, uint16(n-overhead)))
 	if err != nil {
 		return nil, err
 	}

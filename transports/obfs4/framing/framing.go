@@ -28,7 +28,7 @@
 //
 // Package framing implements the obfs4 link framing and cryptography.
 //
-// The Encoder/Decoder shared secret format is:
+// The ObfsEncoder/ObfsDecoder shared secret format is:
 //    uint8_t[32] NaCl secretbox key
 //    uint8_t[16] NaCl Nonce prefix
 //    uint8_t[16] SipHash-2-4 key (used to obfsucate length)
@@ -65,56 +65,40 @@ import (
 	"encoding/binary"
 	"errors"
 	"fmt"
-	"io"
 
-	"gitlab.com/yawning/obfs4.git/common/csrand"
 	"gitlab.com/yawning/obfs4.git/common/drbg"
+	f "gitlab.com/yawning/obfs4.git/common/framing"
 	"golang.org/x/crypto/nacl/secretbox"
 )
 
 const (
-	// MaximumSegmentLength is the length of the largest possible segment
-	// including overhead.
-	MaximumSegmentLength = 1500 - (40 + 12)
 
 	// FrameOverhead is the length of the framing overhead.
-	FrameOverhead = lengthLength + secretbox.Overhead
+	FrameOverhead = f.LengthLength + secretbox.Overhead
 
 	// MaximumFramePayloadLength is the length of the maximum allowed payload
 	// per frame.
-	MaximumFramePayloadLength = MaximumSegmentLength - FrameOverhead
+	MaximumFramePayloadLength = f.MaximumSegmentLength - FrameOverhead
 
-	// KeyLength is the length of the Encoder/Decoder secret key.
+	// KeyLength is the length of the ObfsEncoder/ObfsDecoder secret key.
 	KeyLength = keyLength + noncePrefixLength + drbg.SeedLength
 
-	maxFrameLength = MaximumSegmentLength - lengthLength
-	minFrameLength = FrameOverhead - lengthLength
+	minFrameLength = FrameOverhead - f.LengthLength
 
 	keyLength = 32
 
 	noncePrefixLength  = 16
 	nonceCounterLength = 8
 	nonceLength        = noncePrefixLength + nonceCounterLength
-
-	lengthLength = 2
 )
 
-// Error returned when Decoder.Decode() requires more data to continue.
-var ErrAgain = errors.New("framing: More data needed to decode")
-
-// Error returned when Decoder.Decode() failes to authenticate a frame.
-var ErrTagMismatch = errors.New("framing: Poly1305 tag mismatch")
+const (
+	PacketTypePayload = iota
+	PacketTypePrngSeed
+)
 
 // Error returned when the NaCl secretbox nonce's counter wraps (FATAL).
 var ErrNonceCounterWrapped = errors.New("framing: Nonce counter wrapped")
-
-// InvalidPayloadLengthError is the error returned when Encoder.Encode()
-// rejects the payload length.
-type InvalidPayloadLengthError int
-
-func (e InvalidPayloadLengthError) Error() string {
-	return fmt.Sprintf("framing: Invalid payload length: %d", int(e))
-}
 
 type boxNonce struct {
 	prefix  [noncePrefixLength]byte
@@ -146,28 +130,46 @@ func (nonce boxNonce) bytes(out *[nonceLength]byte) error {
 	return nil
 }
 
-// Encoder is a frame encoder instance.
-type Encoder struct {
+// ObfsEncoder is a frame encoder instance.
+type ObfsEncoder struct {
+	f.BaseEncoder
 	key   [keyLength]byte
 	nonce boxNonce
-	drbg  *drbg.HashDrbg
+	PacketOverhead int
+}
+func (encoder *ObfsEncoder) payloadOverhead(_ int) int {
+	return secretbox.Overhead
 }
 
-// NewEncoder creates a new Encoder instance.  It must be supplied a slice
+func (encoder *ObfsEncoder) processLength(length uint16) ([]byte, error) {
+	lengthBytes := make([]byte, encoder.LengthLength)
+	binary.BigEndian.PutUint16(lengthBytes[:], length)
+	return lengthBytes, nil
+}
+
+
+// NewObfsEncoder creates a new ObfsEncoder instance.  It must be supplied a slice
 // containing exactly KeyLength bytes of keying material.
-func NewEncoder(key []byte) *Encoder {
+func NewObfsEncoder(key []byte) *ObfsEncoder {
+
 	if len(key) != KeyLength {
 		panic(fmt.Sprintf("BUG: Invalid encoder key length: %d", len(key)))
 	}
 
-	encoder := new(Encoder)
+	encoder := new(ObfsEncoder)
+
+	encoder.Drbg = f.GenDrbg(key[keyLength+noncePrefixLength:])
+	// encoder.MaxPacketPayloadLength is set in obfs4.go
+	encoder.LengthLength = 2
+	encoder.PayloadOverhead = encoder.payloadOverhead
+
+	encoder.Encode = encoder.encode
+	encoder.ProcessLength = encoder.processLength
+	// encoder.ChopPayload is set in obfs4.go
+
 	copy(encoder.key[:], key[0:keyLength])
 	encoder.nonce.init(key[keyLength : keyLength+noncePrefixLength])
-	seed, err := drbg.SeedFromBytes(key[keyLength+noncePrefixLength:])
-	if err != nil {
-		panic(fmt.Sprintf("BUG: Failed to initialize DRBG: %s", err))
-	}
-	encoder.drbg, _ = drbg.NewHashDrbg(seed)
+	encoder.PacketOverhead = f.LengthLength + f.TypeLength
 
 	return encoder
 }
@@ -175,13 +177,11 @@ func NewEncoder(key []byte) *Encoder {
 // Encode encodes a single frame worth of payload and returns the encoded
 // length.  InvalidPayloadLengthError is recoverable, all other errors MUST be
 // treated as fatal and the session aborted.
-func (encoder *Encoder) Encode(frame, payload []byte) (n int, err error) {
+func (encoder *ObfsEncoder) encode(frame, payload []byte) (n int, err error) {
+	// TODO: Consider generalizing these
 	payloadLen := len(payload)
 	if MaximumFramePayloadLength < payloadLen {
-		return 0, InvalidPayloadLengthError(payloadLen)
-	}
-	if len(frame) < payloadLen+FrameOverhead {
-		return 0, io.ErrShortBuffer
+		return 0, f.InvalidPayloadLengthError(payloadLen)
 	}
 
 	// Generate a new nonce.
@@ -192,114 +192,120 @@ func (encoder *Encoder) Encode(frame, payload []byte) (n int, err error) {
 	encoder.nonce.counter++
 
 	// Encrypt and MAC payload.
-	box := secretbox.Seal(frame[:lengthLength], payload, &nonce, &encoder.key)
-
-	// Obfuscate the length.
-	length := uint16(len(box) - lengthLength)
-	lengthMask := encoder.drbg.NextBlock()
-	length ^= binary.BigEndian.Uint16(lengthMask)
-	binary.BigEndian.PutUint16(frame[:2], length)
+	box := secretbox.Seal(frame[:0], payload, &nonce, &encoder.key)
 
 	// Return the frame.
 	return len(box), nil
 }
 
-// Decoder is a frame decoder instance.
-type Decoder struct {
+type prngRegenFunc func(payload []byte) error
+// ObfsDecoder is a BaseDecoder instance.
+type ObfsDecoder struct {
+	f.BaseDecoder
 	key   [keyLength]byte
 	nonce boxNonce
-	drbg  *drbg.HashDrbg
 
 	nextNonce         [nonceLength]byte
-	nextLength        uint16
-	nextLengthInvalid bool
+
+	PacketOverhead int
+	PrngRegen prngRegenFunc
+}
+func (decoder *ObfsDecoder) payloadOverhead(_ int) int {
+	return secretbox.Overhead
 }
 
-// NewDecoder creates a new Decoder instance.  It must be supplied a slice
+// NewObfsDecoder creates a new ObfsDecoder instance.  It must be supplied a slice
 // containing exactly KeyLength bytes of keying material.
-func NewDecoder(key []byte) *Decoder {
+func NewObfsDecoder(key []byte) *ObfsDecoder {
 	if len(key) != KeyLength {
 		panic(fmt.Sprintf("BUG: Invalid decoder key length: %d", len(key)))
 	}
 
-	decoder := new(Decoder)
+	decoder := new(ObfsDecoder)
+
+	decoder.Drbg = f.GenDrbg(key[keyLength+noncePrefixLength:])
+	decoder.LengthLength = f.LengthLength
+	decoder.MinPayloadLength = f.LengthLength + f.TypeLength
+	decoder.MaxFramePayloadLength = MaximumFramePayloadLength
+
+	// NextLength is set programatically
+	// NextLengthInvalid is set programatically
+
+	decoder.PayloadOverhead = decoder.payloadOverhead
+
+	decoder.DecodeLength = decoder.decodeLength
+	decoder.DecodePayload = decoder.decodePayload
+	decoder.ParsePacket = decoder.parsePacket
+	decoder.Cleanup = decoder.cleanup
+
+	decoder.InitBuffers()
+
 	copy(decoder.key[:], key[0:keyLength])
 	decoder.nonce.init(key[keyLength : keyLength+noncePrefixLength])
-	seed, err := drbg.SeedFromBytes(key[keyLength+noncePrefixLength:])
-	if err != nil {
-		panic(fmt.Sprintf("BUG: Failed to initialize DRBG: %s", err))
-	}
-	decoder.drbg, _ = drbg.NewHashDrbg(seed)
+
+	// nextNonce is programatically derived
+
+	decoder.PacketOverhead = f.LengthLength + f.TypeLength
+	// prngRegen is defined in obfs4.go
 
 	return decoder
 }
 
-// Decode decodes a stream of data and returns the length if any.  ErrAgain is
-// a temporary failure, all other errors MUST be treated as fatal and the
-// session aborted.
-func (decoder *Decoder) Decode(data []byte, frames *bytes.Buffer) (int, error) {
-	// A length of 0 indicates that we do not know how big the next frame is
-	// going to be.
-	if decoder.nextLength == 0 {
-		// Attempt to pull out the next frame length.
-		if lengthLength > frames.Len() {
-			return 0, ErrAgain
-		}
-
-		// Remove the length field from the buffer.
-		var obfsLen [lengthLength]byte
-		_, err := io.ReadFull(frames, obfsLen[:])
-		if err != nil {
-			return 0, err
-		}
-
-		// Derive the nonce the peer used.
-		if err = decoder.nonce.bytes(&decoder.nextNonce); err != nil {
-			return 0, err
-		}
-
-		// Deobfuscate the length field.
-		length := binary.BigEndian.Uint16(obfsLen[:])
-		lengthMask := decoder.drbg.NextBlock()
-		length ^= binary.BigEndian.Uint16(lengthMask)
-		if maxFrameLength < length || minFrameLength > length {
-			// Per "Plaintext Recovery Attacks Against SSH" by
-			// Martin R. Albrecht, Kenneth G. Paterson and Gaven J. Watson,
-			// there are a class of attacks againt protocols that use similar
-			// sorts of framing schemes.
-			//
-			// While obfs4 should not allow plaintext recovery (CBC mode is
-			// not used), attempt to mitigate out of bound frame length errors
-			// by pretending that the length was a random valid range as per
-			// the countermeasure suggested by Denis Bider in section 6 of the
-			// paper.
-
-			decoder.nextLengthInvalid = true
-			length = uint16(csrand.IntRange(minFrameLength, maxFrameLength))
-		}
-		decoder.nextLength = length
-	}
-
-	if int(decoder.nextLength) > frames.Len() {
-		return 0, ErrAgain
-	}
-
-	// Unseal the frame.
-	var box [maxFrameLength]byte
-	n, err := io.ReadFull(frames, box[:decoder.nextLength])
-	if err != nil {
-		return 0, err
-	}
-	out, ok := secretbox.Open(data[:0], box[:n], &decoder.nextNonce, &decoder.key)
-	if !ok || decoder.nextLengthInvalid {
-		// When a random length is used (on length error) the tag should always
-		// mismatch, but be paranoid.
-		return 0, ErrTagMismatch
-	}
-
-	// Clean up and prepare for the next frame.
-	decoder.nextLength = 0
-	decoder.nonce.counter++
-
-	return len(out), nil
+func (decoder *ObfsDecoder) decodeLength(lengthBytes []byte) (uint16, error) {
+	return binary.BigEndian.Uint16(lengthBytes[:decoder.LengthLength]), nil
 }
+
+func (decoder *ObfsDecoder) decodePayload(frames *bytes.Buffer) ([]byte, error) {
+	// Derive the nonce the peer used.
+	err := decoder.nonce.bytes(&decoder.nextNonce)
+	if err != nil {
+		return nil, err
+	}
+
+	//var frame []byte
+	//var frameLen int
+	frameLen, frame, err := decoder.GetFrame(frames)
+	if err != nil {
+		return nil, err
+	}
+
+	holder := make([]byte, decoder.MaxFramePayloadLength)
+	decodedPayload, ok := secretbox.Open(holder[:0], frame[:frameLen], &decoder.nextNonce, &decoder.key)
+	if !ok {
+		return nil, f.ErrTagMismatch
+	}
+
+	return decodedPayload, nil
+}
+
+func (decoder *ObfsDecoder) cleanup() error {
+	decoder.nonce.counter++
+	return nil
+}
+
+func (decoder *ObfsDecoder) parsePacket(decoded []byte, decLen int) error {
+	// Decode the packet.
+	pkt := decoded[0:decLen]
+	pktType := pkt[0]
+	payloadLen := binary.BigEndian.Uint16(pkt[1:])
+	if int(payloadLen) > len(pkt)-decoder.PacketOverhead {
+		return f.InvalidPayloadLengthError(int(payloadLen))
+	}
+	payload := pkt[decoder.PacketOverhead : decoder.PacketOverhead + int(payloadLen)]
+
+	switch pktType {
+		case PacketTypePayload:
+			if payloadLen > 0 {
+				decoder.ReceiveDecodedBuffer.Write(payload)
+			}
+		case PacketTypePrngSeed:
+			err := decoder.PrngRegen(payload)
+			if err != nil {
+				return err
+			}
+		default:
+			// Ignore unknown packet types.
+	}
+	return nil
+}
+
