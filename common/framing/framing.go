@@ -50,16 +50,6 @@ func (e InvalidPacketLengthError) Error() string {
 	return fmt.Sprintf("packet: Invalid packet length: %d", int(e))
 }
 
-/*
-func Gendrbg(key []byte) (*drbg.HashDrbg, error) {
-  seed, err := drbg.SeedFromBytes(key)
-	if err != nil {
-		panic(fmt.Sprintf("BUG: Failed to initialize DRBG: %s", err))
-	}
-  return drbg.NewHashDrbg(seed)
-}
-*/
-
 type encodeFunc func(frame, payload []byte) (n int, err error)
 type chopPayloadFunc func(pktType uint8, payload []byte) []byte
 type overheadFunc func(payloadLen int) int

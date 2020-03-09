@@ -324,3 +324,6 @@ func ExpandedNBytes(srcLen, inputBlockBits, outputBlockBits uint64) uint64 {
 func CompressedNBytes(expandedLen, inputBlockBits, outputBlockBits uint64) uint64 {
 	return uint64(math.Ceil(float64(expandedLen) * (float64(outputBlockBits) / float64(inputBlockBits))))
 }
+func CompressedNBytes_floor(expandedLen, inputBlockBits, outputBlockBits uint64) uint64 {
+	return uint64(math.Floor(float64(expandedLen) * (float64(outputBlockBits) / float64(inputBlockBits))))
+}

@@ -123,7 +123,7 @@ func newRiverrunEncoder(key []byte, writeStream cipher.Stream, table8, table16 [
   encoder := new(riverrunEncoder)
 
 	encoder.Drbg = f.GenDrbg(key[:])
-  encoder.MaxPacketPayloadLength = int(ctstretch.CompressedNBytes(f.MaximumSegmentLength - ctstretch.ExpandedNBytes(uint64(f.LengthLength), compressedBlockBits, expandedBlockBits), expandedBlockBits, compressedBlockBits))
+  encoder.MaxPacketPayloadLength = int(ctstretch.CompressedNBytes_floor(f.MaximumSegmentLength - ctstretch.ExpandedNBytes(uint64(f.LengthLength), compressedBlockBits, expandedBlockBits), expandedBlockBits, compressedBlockBits))
   encoder.LengthLength = int(ctstretch.ExpandedNBytes(uint64(f.LengthLength), compressedBlockBits, expandedBlockBits))
   encoder.PayloadOverhead = encoder.payloadOverhead
 
@@ -267,20 +267,4 @@ func (rr *RiverrunConn) Write(b []byte) (n int, err error) {
 
 func (rr *RiverrunConn) Read(b []byte) (int, error) {
   return rr.Decoder.Read(b, rr.Conn)
-  /*
-  n, err := rr.Conn.Read(b)
-  if err != nil {
-    return n, err
-  }
-  compressedNBytes := ctstretch.CompressedNBytes(uint64(n), rr.Decoder.expandedBlockBits, rr.Decoder.compressedBlockBits)
-  compressed := make([]byte, compressedNBytes)
-  err = ctstretch.CompressBytes(b[:n], compressed, rr.Decoder.expandedBlockBits, rr.Decoder.compressedBlockBits, rr.Decoder.revTable16, rr.Decoder.revTable8, rr.Decoder.readStream)
-  if err != nil {
-    log.Debugf(err.Error())
-    return 0, err
-  }
-  copy(b[:compressedNBytes], compressed[:])
-  log.Debugf("Riverrun: <- %d", n)
-  return int(compressedNBytes), err
-  */
 }
