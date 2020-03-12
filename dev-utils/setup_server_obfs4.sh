@@ -15,39 +15,11 @@ gpg --export A3C4F0F979CAA22CDBA8F512EE8CBC9E886DDD89 | apt-key add -
 add-apt-repository ppa:longsleep/golang-backports
 
 apt update
-apt install tor deb.torproject.org-keyring git golang-go
-
-mkdir ~/.ssh
-
-echo "-----BEGIN EC PRIVATE KEY-----
-MIHcAgEBBEIBzwn5AYtJ5unwLZUAG5rC9hnbhd4nftcmi59bDEKGrnIna9X/oeHK
-MSdCXbkYVLMu944OT8HL+PRShvok9zIsWyegBwYFK4EEACOhgYkDgYYABAHaF2hN
-Mg+OBhNtjeoM35sEuDb6hgE06OTyhnXYFXlh5xArNpXr7Wnn4LHG0KVy8J1T3QeQ
-X5pODyWPHoox/8rhXwHbLcnj3SCFJsIZkVRxY3ztlX/xtgbewU+AQ8t+4EP2pcuI
-75HSZQyb6xLyaHWXPsdfJSMKof8nHGaop90LTHm9sw==
------END EC PRIVATE KEY-----" | tee ~/.ssh/racecar_bot
-
-chown $USER ~/.ssh/racecar_bot
-
-chmod 600 ~/.ssh/racecar_bot
-
-echo "host github.com
- HostName github.com
- IdentityFile ~/.ssh/racecar_bot
- User git" | tee ~/.ssh/config
-
-git clone git@github.com:RACECAR-GU/obfsX.git ~/obfsx
-
-cd ~/obfsx
-
-go build -o obfs4proxy/obfs4proxy ./obfs4proxy
-
-cp ~/obfsx/obfs4proxy/obfs4proxy /usr/bin/obfs4proxy
+apt install tor deb.torproject.org-keyring obfs4proxy
 
 rm /etc/tor/torrc
 
 mkdir /tor/
-mkdir /tor/obfs5_bridge_data/
 chown -R debian-tor /tor/
 chmod -R 755 /tor
 
