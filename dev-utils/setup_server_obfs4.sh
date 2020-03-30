@@ -12,16 +12,10 @@ deb-src https://deb.torproject.org/torproject.org bionic main" | tee /etc/apt/so
 wget -qO- https://deb.torproject.org/torproject.org/A3C4F0F979CAA22CDBA8F512EE8CBC9E886DDD89.asc | gpg --import
 gpg --export A3C4F0F979CAA22CDBA8F512EE8CBC9E886DDD89 | apt-key add -
 
-add-apt-repository ppa:longsleep/golang-backports
-
 apt update
 apt install tor deb.torproject.org-keyring obfs4proxy
 
 rm /etc/tor/torrc
-
-mkdir /tor/
-chown -R debian-tor /tor/
-chmod -R 755 /tor
 
 echo "BridgeRelay 1
 
@@ -51,5 +45,8 @@ sudo apparmor_parser -R /etc/apparmor.d/system_tor
 
 systemctl restart tor
 
+sleep 5
+
 cat /var/log/syslog | grep "Your Tor server's identity key fingerprint is" -i
 tail /var/lib/tor/pt_state/obfs4_bridgeline.txt
+# TODO: Have these conviniently print in a single line, perhaps the full bridgeline
