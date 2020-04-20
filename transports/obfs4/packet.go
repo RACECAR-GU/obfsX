@@ -36,22 +36,22 @@ import (
 )
 
 const (
-	packetOverhead          = f.LengthLength + f.TypeLength
-	maxPacketPayloadLength  = framing.MaximumFramePayloadLength - packetOverhead
-	seedPacketPayloadLength = seedLength
+	PacketOverhead          = f.LengthLength + f.TypeLength
+	MaxPacketPayloadLength  = framing.MaximumFramePayloadLength - PacketOverhead
+	SeedPacketPayloadLength = seedLength
 )
 
-var zeroPadBytes [maxPacketPayloadLength]byte
+var zeroPadBytes [MaxPacketPayloadLength]byte
 
-func makeUnpaddedPayload(pktType uint8, data []byte) []byte {
-	return makePayload(pktType, data, 0)
+func MakeUnpaddedPayload(pktType uint8, data []byte) []byte {
+	return MakePayload(pktType, data, 0)
 }
 
-func makePayload(pktType uint8, data []byte, padLen uint16) []byte {
+func MakePayload(pktType uint8, data []byte, padLen uint16) []byte {
 
-	if len(data)+int(padLen) > maxPacketPayloadLength {
-		panic(fmt.Sprintf("BUG: makePacyload() len(data) + padLen > maxPacketPayloadLength: %d + %d > %d",
-			len(data), padLen, maxPacketPayloadLength))
+	if len(data)+int(padLen) > MaxPacketPayloadLength {
+		panic(fmt.Sprintf("BUG: makePacyload() len(data) + padLen > MaxPacketPayloadLength: %d + %d > %d",
+			len(data), padLen, MaxPacketPayloadLength))
 	}
 
 	// Payload is:

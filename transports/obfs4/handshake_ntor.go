@@ -61,7 +61,7 @@ const (
 	markLength = sha256.Size / 2
 	macLength  = sha256.Size / 2
 
-	inlineSeedFrameLength = framing.FrameOverhead + packetOverhead + seedPacketPayloadLength
+	inlineSeedFrameLength = framing.FrameOverhead + PacketOverhead + SeedPacketPayloadLength
 )
 
 // ErrMarkNotFoundYet is the error returned when the obfs4 handshake is

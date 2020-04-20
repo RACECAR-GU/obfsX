@@ -1,4 +1,4 @@
-/*
+obfs5/*
  * Copyright (c) 2014, Yawning Angel <yawning at schwanenlied dot me>
  * All rights reserved.
  *
@@ -25,9 +25,12 @@
  * POSSIBILITY OF SUCH DAMAGE.
  */
 
-// Package obfs4 provides an implementation of the Tor Project's obfs4
+// Package obfs5 provides an implementation of the Tor Project's obfs5
 // obfuscation protocol.
-package obfs4 // import "gitlab.com/yawning/obfs4.git/transports/obfs4"
+package obfs5 // import "gitlab.com/yawning/obfs5.git/transports/obfs5"
+
+// TODO: Cut this code base down significantly - go through OBFS4 code and remove duplicity
+// Potential approach - spin up an obfs4conn and wrap w/ riverrun and sharknado
 
 import (
 	"bytes"
@@ -44,16 +47,20 @@ import (
 
 	"git.torproject.org/pluggable-transports/goptlib.git"
 	"gitlab.com/yawning/obfs4.git/common/drbg"
+	"gitlab.com/yawning/obfs4.git/common/log"
 	"gitlab.com/yawning/obfs4.git/common/ntor"
 	"gitlab.com/yawning/obfs4.git/common/probdist"
 	"gitlab.com/yawning/obfs4.git/common/replayfilter"
 	"gitlab.com/yawning/obfs4.git/transports/base"
 	"gitlab.com/yawning/obfs4.git/transports/obfs4/framing"
+	"gitlab.com/yawning/obfs4.git/transports/obfs4"
+	"gitlab.com/yawning/obfs4.git/transports/sharknado"
+	"gitlab.com/yawning/obfs4.git/transports/riverrun"
 	f "gitlab.com/yawning/obfs4.git/common/framing"
 )
 
 const (
-	transportName = "obfs4"
+	transportName = "obfs5"
 
 	nodeIDArg     = "node-id"
 	publicKeyArg  = "public-key"
@@ -62,10 +69,10 @@ const (
 	iatArg        = "iat-mode"
 	certArg       = "cert"
 
-	biasCmdArg = "obfs4-distBias"
+	biasCmdArg = "obfs5-distBias"
 
 	seedLength             = drbg.SeedLength
-	headerLength           = framing.FrameOverhead + PacketOverhead
+	headerLength           = framing.FrameOverhead + obfs4.PacketOverhead
 	clientHandshakeTimeout = time.Duration(60) * time.Second
 	serverHandshakeTimeout = time.Duration(30) * time.Second
 	replayTTL              = time.Duration(3) * time.Hour
@@ -84,28 +91,28 @@ const (
 // uniformly distributed.
 var biasedDist bool
 
-type obfs4ClientArgs struct {
+type obfs5ClientArgs struct {
 	nodeID     *ntor.NodeID
 	publicKey  *ntor.PublicKey
 	sessionKey *ntor.Keypair
 	iatMode    int
 }
 
-// Transport is the obfs4 implementation of the base.Transport interface.
+// Transport is the obfs5 implementation of the base.Transport interface.
 type Transport struct{}
 
-// Name returns the name of the obfs4 transport protocol.
+// Name returns the name of the obfs5 transport protocol.
 func (t *Transport) Name() string {
 	return transportName
 }
 
-// ClientFactory returns a new obfs4ClientFactory instance.
+// ClientFactory returns a new obfs5ClientFactory instance.
 func (t *Transport) ClientFactory(stateDir string) (base.ClientFactory, error) {
-	cf := &obfs4ClientFactory{transport: t}
+	cf := &obfs5ClientFactory{transport: t}
 	return cf, nil
 }
 
-// ServerFactory returns a new obfs4ServerFactory instance.
+// ServerFactory returns a new obfs5ServerFactory instance.
 func (t *Transport) ServerFactory(stateDir string, args *pt.Args) (base.ServerFactory, error) {
 	st, err := serverStateFromArgs(stateDir, args)
 	if err != nil {
@@ -144,49 +151,16 @@ func (t *Transport) ServerFactory(stateDir string, args *pt.Args) (base.ServerFa
 	return sf, nil
 }
 
-type obfs4ClientFactory struct {
+type obfs5ClientFactory struct {
 	transport base.Transport
 }
 
-func (cf *obfs4ClientFactory) Transport() base.Transport {
+func (cf *obfs5ClientFactory) Transport() base.Transport {
 	return cf.transport
 }
 
-func ParseCert(args *pt.Args) (nodeID *ntor.NodeID, publicKey *ntor.PublicKey, err error) {
-	// The "new" (version >= 0.0.3) bridge lines use a unified "cert" argument
-	// for the Node ID and Public Key.
-	certStr, ok := args.Get(certArg)
-	if ok {
-		cert, err := serverCertFromString(certStr)
-		if err != nil {
-			return nil, nil, err
-		}
-		nodeID, publicKey = cert.unpack()
-	} else {
-		// The "old" style (version <= 0.0.2) bridge lines use separate Node ID
-		// and Public Key arguments in Base16 encoding and are a UX disaster.
-		nodeIDStr, ok := args.Get(nodeIDArg)
-		if !ok {
-			return nil, nil, fmt.Errorf("missing argument '%s'", nodeIDArg)
-		}
-		var err error
-		if nodeID, err = ntor.NodeIDFromHex(nodeIDStr); err != nil {
-			return nil, nil, err
-		}
-
-		publicKeyStr, ok := args.Get(publicKeyArg)
-		if !ok {
-			return nil, nil, fmt.Errorf("missing argument '%s'", publicKeyArg)
-		}
-		if publicKey, err = ntor.PublicKeyFromHex(publicKeyStr); err != nil {
-			return nil, nil, err
-		}
-	}
-	return nodeID, publicKey, nil
-}
-
-func (cf *obfs4ClientFactory) ParseArgs(args *pt.Args) (interface{}, error) {
-	nodeID, publicKey, err := ParseCert(args)
+func (cf *obfs5ClientFactory) ParseArgs(args *pt.Args) (interface{}, error) {
+	nodeID, publicKey, err := obfs4.ParseCert(args)
 	if err != nil {
 		return nil, err
 	}
@@ -208,12 +182,12 @@ func (cf *obfs4ClientFactory) ParseArgs(args *pt.Args) (interface{}, error) {
 		return nil, err
 	}
 
-	return &obfs4ClientArgs{nodeID, publicKey, sessionKey, iatMode}, nil
+	return &obfs5ClientArgs{nodeID, publicKey, sessionKey, iatMode}, nil
 }
 
-func (cf *obfs4ClientFactory) Dial(network, addr string, dialFn base.DialFunc, args interface{}) (net.Conn, error) {
+func (cf *obfs5ClientFactory) Dial(network, addr string, dialFn base.DialFunc, args interface{}) (net.Conn, error) {
 	// Validate args before bothering to open connection.
-	ca, ok := args.(*obfs4ClientArgs)
+	ca, ok := args.(*obfs5ClientArgs)
 	if !ok {
 		return nil, fmt.Errorf("invalid argument type for args")
 	}
@@ -222,14 +196,14 @@ func (cf *obfs4ClientFactory) Dial(network, addr string, dialFn base.DialFunc, a
 		return nil, err
 	}
 	dialConn := conn
-	if conn, err = newObfs4ClientConn(conn, ca); err != nil {
+	if conn, err = newObfs5ClientConn(conn, ca); err != nil {
 		dialConn.Close()
 		return nil, err
 	}
 	return conn, nil
 }
 
-type obfs4ServerFactory struct {
+type obfs5ServerFactory struct {
 	transport base.Transport
 	args      *pt.Args
 
@@ -243,16 +217,16 @@ type obfs4ServerFactory struct {
 	closeDelay int
 }
 
-func (sf *obfs4ServerFactory) Transport() base.Transport {
+func (sf *obfs5ServerFactory) Transport() base.Transport {
 	return sf.transport
 }
 
-func (sf *obfs4ServerFactory) Args() *pt.Args {
+func (sf *obfs5ServerFactory) Args() *pt.Args {
 	return sf.args
 }
 
-func (sf *obfs4ServerFactory) WrapConn(conn net.Conn) (net.Conn, error) {
-	// Not much point in having a separate newObfs4ServerConn routine when
+func (sf *obfs5ServerFactory) WrapConn(conn net.Conn) (net.Conn, error) {
+	// Not much point in having a separate newObfs5ServerConn routine when
 	// wrapping requires using values from the factory instance.
 
 	// Generate the session keypair *before* consuming data from the peer, to
@@ -271,7 +245,19 @@ func (sf *obfs4ServerFactory) WrapConn(conn net.Conn) (net.Conn, error) {
 		iatDist = probdist.New(sf.iatSeed, 0, maxIATDelay, biasedDist)
 	}
 
-	c := &obfs4Conn{conn, true, lenDist, iatDist, sf.iatMode, nil, nil, false}
+	_, publicKey, err := obfs4.ParseCert(sf.args)
+	if err != nil {
+		return nil, err
+	}
+	serverSeed, err := drbg.SeedFromBytes(publicKey[:drbg.SeedLength])
+	if err != nil {
+		return nil, err
+	}
+	c := &obfs5Conn{conn, true, lenDist, iatDist, sf.iatMode, nil, nil, false}
+	c.Conn, err = riverrun.NewRiverrunConn(c.Conn, c.isServer, serverSeed)
+	if err != nil {
+		return nil, err
+	}
 
 	startTime := time.Now()
 
@@ -283,7 +269,7 @@ func (sf *obfs4ServerFactory) WrapConn(conn net.Conn) (net.Conn, error) {
 	return c, nil
 }
 
-type obfs4Conn struct {
+type obfs5Conn struct {
 	net.Conn
 
 	isServer bool
@@ -298,7 +284,7 @@ type obfs4Conn struct {
 	connEstablished bool
 }
 
-func newObfs4ClientConn(conn net.Conn, args *obfs4ClientArgs) (c *obfs4Conn, err error) {
+func newObfs5ClientConn(conn net.Conn, args *obfs5ClientArgs) (c *obfs5Conn, err error) {
 	// Generate the initial protocol polymorphism distribution(s).
 	var seed *drbg.Seed
 	if seed, err = drbg.NewSeed(); err != nil {
@@ -314,9 +300,21 @@ func newObfs4ClientConn(conn net.Conn, args *obfs4ClientArgs) (c *obfs4Conn, err
 		}
 		iatDist = probdist.New(iatSeed, 0, maxIATDelay, biasedDist)
 	}
+	// All clients that talk to the same obfs5 server should shape their flows
+	// identically, so we derive riverrun/sharknado's seed from our obfs5 server's
+	// public key.
+	serverSeed, err := drbg.SeedFromBytes(args.publicKey[:drbg.SeedLength])
+	if err != nil {
+		return nil, err
+	}
 
 	// Allocate the client structure.
-	c = &obfs4Conn{conn, false, lenDist, iatDist, args.iatMode, nil, nil, false}
+	c = &obfs5Conn{conn, false, lenDist, iatDist, args.iatMode, nil, nil, false}
+	c.Conn, err = riverrun.NewRiverrunConn(c.Conn, c.isServer, serverSeed)
+	if err != nil {
+		return nil, err
+	}
+	c.Conn = sharknado.NewSharknadoConn(c.Conn, c.getDummyTraffic, serverSeed)
 
 	// Start the handshake timeout.
 	deadline := time.Now().Add(clientHandshakeTimeout)
@@ -336,7 +334,7 @@ func newObfs4ClientConn(conn net.Conn, args *obfs4ClientArgs) (c *obfs4Conn, err
 	return
 }
 
-func (conn *obfs4Conn) clientHandshake(nodeID *ntor.NodeID, peerIdentityKey *ntor.PublicKey, sessionKey *ntor.Keypair) error {
+func (conn *obfs5Conn) clientHandshake(nodeID *ntor.NodeID, peerIdentityKey *ntor.PublicKey, sessionKey *ntor.Keypair) error {
 	if conn.isServer {
 		return fmt.Errorf("clientHandshake called on server connection")
 	}
@@ -384,18 +382,18 @@ func (conn *obfs4Conn) clientHandshake(nodeID *ntor.NodeID, peerIdentityKey *nto
 
 func newEncoder(key []byte) *framing.ObfsEncoder {
 	encoder := framing.NewObfsEncoder(key)
-	encoder.ChopPayload = MakeUnpaddedPayload
-	encoder.MaxPacketPayloadLength = MaxPacketPayloadLength
+	encoder.ChopPayload = obfs4.MakeUnpaddedPayload
+	encoder.MaxPacketPayloadLength = obfs4.MaxPacketPayloadLength
 	return encoder
 }
 
-func (conn *obfs4Conn) newDecoder(key []byte) {
+func (conn *obfs5Conn) newDecoder(key []byte) {
 	decoder := framing.NewObfsDecoder(key)
 	decoder.PrngRegen = conn.prngRegen
 	conn.decoder = decoder
 }
 
-func (conn *obfs4Conn) serverHandshake(sf *obfs4ServerFactory, sessionKey *ntor.Keypair) error {
+func (conn *obfs5Conn) serverHandshake(sf *obfs5ServerFactory, sessionKey *ntor.Keypair) error {
 	if !conn.isServer {
 		return fmt.Errorf("serverHandshake called on client connection")
 	}
@@ -458,7 +456,7 @@ func (conn *obfs4Conn) serverHandshake(sf *obfs4ServerFactory, sessionKey *ntor.
 	}
 
 	// Send the PRNG seed as the first packet.
-	if err := conn.encoder.MakePacket(&frameBuf, MakePayload(framing.PacketTypePrngSeed, sf.lenSeed.Bytes()[:], 0)); err != nil {
+	if err := conn.encoder.MakePacket(&frameBuf, obfs4.MakePayload(framing.PacketTypePrngSeed, sf.lenSeed.Bytes()[:], 0)); err != nil {
 		return err
 	}
 	if _, err = conn.Conn.Write(frameBuf.Bytes()); err != nil {
@@ -469,12 +467,12 @@ func (conn *obfs4Conn) serverHandshake(sf *obfs4ServerFactory, sessionKey *ntor.
 	return nil
 }
 
-func (conn *obfs4Conn) Read(b []byte) (n int, err error) {
+func (conn *obfs5Conn) Read(b []byte) (n int, err error) {
 	return conn.decoder.Read(b, conn.Conn)
 }
-func (conn *obfs4Conn) prngRegen(payload []byte) error {
+func (conn *obfs5Conn) prngRegen(payload []byte) error {
 	// Only regenerate the distribution if we are the client.
-	if len(payload) == SeedPacketPayloadLength && conn.isServer {
+	if len(payload) == obfs4.SeedPacketPayloadLength && conn.isServer {
 		seed, err := drbg.SeedFromBytes(payload)
 		if err != nil {
 			return err
@@ -492,7 +490,7 @@ func (conn *obfs4Conn) prngRegen(payload []byte) error {
 	return nil
 }
 
-func (conn *obfs4Conn) Write(b []byte) (n int, err error) {
+func (conn *obfs5Conn) Write(b []byte) (n int, err error) {
 	var frameBuf bytes.Buffer
 	frameBuf, n, err = conn.encoder.Chop(b, framing.PacketTypePayload)
 	if err != nil {
@@ -568,15 +566,15 @@ func (conn *obfs4Conn) Write(b []byte) (n int, err error) {
 	return
 }
 
-func (conn *obfs4Conn) SetDeadline(t time.Time) error {
+func (conn *obfs5Conn) SetDeadline(t time.Time) error {
 	return syscall.ENOTSUP
 }
 
-func (conn *obfs4Conn) SetWriteDeadline(t time.Time) error {
+func (conn *obfs5Conn) SetWriteDeadline(t time.Time) error {
 	return syscall.ENOTSUP
 }
 
-func (conn *obfs4Conn) closeAfterDelay(sf *obfs4ServerFactory, startTime time.Time) {
+func (conn *obfs5Conn) closeAfterDelay(sf *obfs5ServerFactory, startTime time.Time) {
 	// I-it's not like I w-wanna handshake with you or anything.  B-b-baka!
 	defer conn.Conn.Close()
 
@@ -595,7 +593,7 @@ func (conn *obfs4Conn) closeAfterDelay(sf *obfs4ServerFactory, startTime time.Ti
 	_, _ = io.Copy(ioutil.Discard, conn.Conn)
 }
 
-func (conn *obfs4Conn) padBurst(burst *bytes.Buffer, toPadTo int) (err error) {
+func (conn *obfs5Conn) padBurst(burst *bytes.Buffer, toPadTo int) (err error) {
 	tailLen := burst.Len() % f.MaximumSegmentLength
 
 	padLen := 0
@@ -606,16 +604,16 @@ func (conn *obfs4Conn) padBurst(burst *bytes.Buffer, toPadTo int) (err error) {
 	}
 
 	if padLen > headerLength {
-		err = conn.encoder.MakePacket(burst, MakePayload(framing.PacketTypePayload, []byte{}, uint16(padLen-headerLength)))
+		err = conn.encoder.MakePacket(burst, obfs4.MakePayload(framing.PacketTypePayload, []byte{}, uint16(padLen-headerLength)))
 		if err != nil {
 			return
 		}
 	} else if padLen > 0 {
-		err = conn.encoder.MakePacket(burst, MakePayload(framing.PacketTypePayload, []byte{}, uint16(conn.encoder.MaxPacketPayloadLength)))
+		err = conn.encoder.MakePacket(burst, obfs4.MakePayload(framing.PacketTypePayload, []byte{}, uint16(conn.encoder.MaxPacketPayloadLength)))
 		if err != nil {
 			return
 		}
-		err = conn.encoder.MakePacket(burst, MakePayload(framing.PacketTypePayload, []byte{}, uint16(padLen)))
+		err = conn.encoder.MakePacket(burst, obfs4.MakePayload(framing.PacketTypePayload, []byte{}, uint16(padLen)))
 		if err != nil {
 			return
 		}
@@ -624,11 +622,44 @@ func (conn *obfs4Conn) padBurst(burst *bytes.Buffer, toPadTo int) (err error) {
 	return
 }
 
-func init() {
-	flag.BoolVar(&biasedDist, biasCmdArg, false, "Enable obfs4 using ScrambleSuit style table generation")
+// getDummyTraffic must be of type sharknado.DummyTrafficFunc and return `n`
+// bytes of dummy traffic that's ready to be written to the wire.
+func (conn *obfs5Conn) getDummyTraffic(n int) ([]byte, error) {
+
+	// We're still busy with the handshake and haven't determined our shared
+	// secret yet.  We therefore cannot send dummy traffic just yet.
+	if !conn.connEstablished {
+		return nil, fmt.Errorf("Connection not yet established.  No dummy traffic available.")
+	}
+
+	var overhead = framing.FrameOverhead + conn.encoder.PacketOverhead
+	var frameBuf bytes.Buffer
+	for n > conn.encoder.MaxPacketPayloadLength {
+		err := conn.encoder.MakePacket(&frameBuf, obfs4.MakePayload(framing.PacketTypePayload, nil, uint16(conn.encoder.MaxPacketPayloadLength)))
+		if err != nil {
+			return nil, err
+		}
+		n -= conn.encoder.MaxPacketPayloadLength + overhead
+	}
+	// Do we have enough remaining padding to fit it into a new frame?  If not,
+	// let's just create an empty frame.
+	if n < overhead {
+		log.Debugf("Remaining n < frame overhead.")
+		n = overhead
+	}
+	err := conn.encoder.MakePacket(&frameBuf, obfs4.MakePayload(framing.PacketTypePayload, nil, uint16(n-overhead)))
+	if err != nil {
+		return nil, err
+	}
+	log.Debugf("Size of dummy traffic buffer: %d", frameBuf.Len())
+	return frameBuf.Bytes(), nil
 }
 
-var _ base.ClientFactory = (*obfs4ClientFactory)(nil)
-var _ base.ServerFactory = (*obfs4ServerFactory)(nil)
+func init() {
+	flag.BoolVar(&biasedDist, biasCmdArg, false, "Enable obfs5 using ScrambleSuit style table generation")
+}
+
+var _ base.ClientFactory = (*obfs5ClientFactory)(nil)
+var _ base.ServerFactory = (*obfs5ServerFactory)(nil)
 var _ base.Transport = (*Transport)(nil)
 var _ net.Conn = (*obfs4Conn)(nil)
