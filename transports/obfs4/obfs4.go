@@ -44,6 +44,7 @@ import (
 
 	"git.torproject.org/pluggable-transports/goptlib.git"
 	"gitlab.com/yawning/obfs4.git/common/drbg"
+	"gitlab.com/yawning/obfs4.git/common/log"
 	"gitlab.com/yawning/obfs4.git/common/ntor"
 	"gitlab.com/yawning/obfs4.git/common/probdist"
 	"gitlab.com/yawning/obfs4.git/common/replayfilter"
@@ -86,7 +87,7 @@ var biasedDist bool
 
 type ClientArgs struct {
 	nodeID     *ntor.NodeID
-	publicKey  *ntor.PublicKey
+	PublicKey  *ntor.PublicKey
 	sessionKey *ntor.Keypair
 	iatMode    int
 }
@@ -101,7 +102,7 @@ func (t *Transport) Name() string {
 
 // ClientFactory returns a new ClientFactory instance.
 func (t *Transport) ClientFactory(stateDir string) (base.ClientFactory, error) {
-	cf := &ClientFactory{transport: t}
+	cf := &ClientFactory{Trans: t}
 	return cf, nil
 }
 
@@ -145,11 +146,11 @@ func (t *Transport) ServerFactory(stateDir string, args *pt.Args) (base.ServerFa
 }
 
 type ClientFactory struct {
-	transport base.Transport
+	Trans base.Transport
 }
 
 func (cf *ClientFactory) Transport() base.Transport {
-	return cf.transport
+	return cf.Trans
 }
 
 func ParseCert(args *pt.Args) (nodeID *ntor.NodeID, publicKey *ntor.PublicKey, err error) {
@@ -222,7 +223,7 @@ func (cf *ClientFactory) Dial(network, addr string, dialFn base.DialFunc, args i
 		return nil, err
 	}
 	dialConn := conn
-	if conn, err = newClientConn(conn, ca); err != nil {
+	if conn, err = NewClientConn(conn, ca); err != nil {
 		dialConn.Close()
 		return nil, err
 	}
@@ -298,7 +299,7 @@ type Conn struct {
 	connEstablished bool
 }
 
-func newClientConn(conn net.Conn, args *ClientArgs) (c *Conn, err error) {
+func NewClientConn(conn net.Conn, args *ClientArgs) (c *Conn, err error) {
 	// Generate the initial protocol polymorphism distribution(s).
 	var seed *drbg.Seed
 	if seed, err = drbg.NewSeed(); err != nil {
@@ -324,7 +325,7 @@ func newClientConn(conn net.Conn, args *ClientArgs) (c *Conn, err error) {
 		return nil, err
 	}
 
-	if err = c.clientHandshake(args.nodeID, args.publicKey, args.sessionKey); err != nil {
+	if err = c.clientHandshake(args.nodeID, args.PublicKey, args.sessionKey); err != nil {
 		return nil, err
 	}
 
@@ -626,7 +627,7 @@ func (conn *Conn) padBurst(burst *bytes.Buffer, toPadTo int) (err error) {
 
 // getDummyTraffic must be of type sharknado.DummyTrafficFunc and return `n`
 // bytes of dummy traffic that's ready to be written to the wire.
-func (conn *Conn) getDummyTraffic(n int) ([]byte, error) {
+func (conn *Conn) GetDummyTraffic(n int) ([]byte, error) {
 
 	// We're still busy with the handshake and haven't determined our shared
 	// secret yet.  We therefore cannot send dummy traffic just yet.
@@ -637,7 +638,7 @@ func (conn *Conn) getDummyTraffic(n int) ([]byte, error) {
 	var overhead = framing.FrameOverhead + conn.encoder.PacketOverhead
 	var frameBuf bytes.Buffer
 	for n > conn.encoder.MaxPacketPayloadLength {
-		err := conn.encoder.MakePacket(&frameBuf, obfs4.MakePayload(framing.PacketTypePayload, nil, uint16(conn.encoder.MaxPacketPayloadLength)))
+		err := conn.encoder.MakePacket(&frameBuf, MakePayload(framing.PacketTypePayload, nil, uint16(conn.encoder.MaxPacketPayloadLength)))
 		if err != nil {
 			return nil, err
 		}
@@ -649,7 +650,7 @@ func (conn *Conn) getDummyTraffic(n int) ([]byte, error) {
 		log.Debugf("Remaining n < frame overhead.")
 		n = overhead
 	}
-	err := conn.encoder.MakePacket(&frameBuf, obfs4.MakePayload(framing.PacketTypePayload, nil, uint16(n-overhead)))
+	err := conn.encoder.MakePacket(&frameBuf, MakePayload(framing.PacketTypePayload, nil, uint16(n-overhead)))
 	if err != nil {
 		return nil, err
 	}

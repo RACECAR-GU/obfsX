@@ -30,30 +30,15 @@
 package obfs5 // import "gitlab.com/yawning/obfs5.git/transports/obfs5"
 
 import (
-	"bytes"
-	"crypto/sha256"
 	"flag"
 	"fmt"
-	"io"
-	"io/ioutil"
-	"math/rand"
 	"net"
-	"strconv"
-	"syscall"
-	"time"
 
-	"git.torproject.org/pluggable-transports/goptlib.git"
 	"gitlab.com/yawning/obfs4.git/common/drbg"
-	"gitlab.com/yawning/obfs4.git/common/log"
-	"gitlab.com/yawning/obfs4.git/common/ntor"
-	"gitlab.com/yawning/obfs4.git/common/probdist"
-	"gitlab.com/yawning/obfs4.git/common/replayfilter"
 	"gitlab.com/yawning/obfs4.git/transports/base"
-	"gitlab.com/yawning/obfs4.git/transports/obfs4/framing"
 	"gitlab.com/yawning/obfs4.git/transports/obfs4"
 	"gitlab.com/yawning/obfs4.git/transports/sharknado"
 	"gitlab.com/yawning/obfs4.git/transports/riverrun"
-	f "gitlab.com/yawning/obfs4.git/common/framing"
 )
 
 const (
@@ -67,11 +52,13 @@ const (
 var biasedDist bool
 
 type ClientArgs struct {
-	obfs4.ClientArgs
+	*obfs4.ClientArgs
 }
 
 // Transport is the obfs5 implementation of the base.Transport interface.
-type Transport struct{}
+type Transport struct{
+	*obfs4.Transport
+}
 
 // Name returns the name of the obfs5 transport protocol.
 func (t *Transport) Name() string {
@@ -80,12 +67,13 @@ func (t *Transport) Name() string {
 
 // ClientFactory returns a new ClientFactory instance.
 func (t *Transport) ClientFactory(stateDir string) (base.ClientFactory, error) {
-	cf := &ClientFactory{transport: t}
+	cf := new(ClientFactory)
+	cf.ClientFactory = &obfs4.ClientFactory{t}
 	return cf, nil
 }
 
 type ClientFactory struct {
-	obfs4.ClientFactory
+	*obfs4.ClientFactory
 }
 
 func (cf *ClientFactory) Dial(network, addr string, dialFn base.DialFunc, args interface{}) (net.Conn, error) {
@@ -94,8 +82,12 @@ func (cf *ClientFactory) Dial(network, addr string, dialFn base.DialFunc, args i
 	if !ok {
 		return nil, fmt.Errorf("invalid argument type for args")
 	}
-	c, err := cf.ClientFactory.Dial(network, addr, dialFn, args.ClientArgs)
-	if conn, err = newClientConn(conn, ca); err != nil {
+	conn, err := dialFn(network, addr)
+	if err != nil {
+		return nil, err
+	}
+	dialConn := conn
+	if conn, err = NewClientConn(conn, ca); err != nil {
 		dialConn.Close()
 		return nil, err
 	}
@@ -109,9 +101,8 @@ type ServerFactory struct {
 func (sf *ServerFactory) WrapConn(conn net.Conn) (net.Conn, error) {
 	// Not much point in having a separate newServerConn routine when
 	// wrapping requires using values from the factory instance.
-	obfs4, err := sf.ServerFactory.WrapConn(nil)
 
-	_, publicKey, err := obfs4.ParseCert(sf.args)
+	_, publicKey, err := obfs4.ParseCert(sf.Args())
 	if err != nil {
 		return nil, err
 	}
@@ -119,35 +110,40 @@ func (sf *ServerFactory) WrapConn(conn net.Conn) (net.Conn, error) {
 	if err != nil {
 		return nil, err
 	}
-	obfs4.Conn, err = riverrun.NewRiverrunConn(conn, true, serverSeed)
+	inner, err := riverrun.NewRiverrunConn(conn, true, serverSeed)
 	if err != nil {
 		return nil, err
 	}
 
-	return c, nil
+	return sf.ServerFactory.WrapConn(inner)
 }
 
 type Conn struct {
-	obfs4.Conn
+	*obfs4.Conn
 }
 
-func newClientConn(obfs4 obfs4.Conn, args *ClientArgs) (c *Conn, err error) {
+func NewClientConn(conn net.Conn, args *ClientArgs) (c *Conn, err error) {
 	// All clients that talk to the same obfs5 server should shape their flows
 	// identically, so we derive riverrun/sharknado's seed from our obfs5 server's
 	// public key.
-	serverSeed, err := drbg.SeedFromBytes(args.publicKey[:drbg.SeedLength])
+	serverSeed, err := drbg.SeedFromBytes(args.PublicKey[:drbg.SeedLength])
 	if err != nil {
 		return nil, err
 	}
 
 	// Allocate the client structure.
 	var internal net.Conn
-	internal, err = riverrun.NewRiverrunConn(obfs4.Conn, false, serverSeed)
+	internal, err = riverrun.NewRiverrunConn(conn, false, serverSeed)
 	if err != nil {
 		return nil, err
 	}
-	obfs4.Conn = sharknado.NewSharknadoConn(internal, obfs4.getDummyTraffic, serverSeed)
-	return &Conn{obfs4}
+	outer, err := obfs4.NewClientConn(internal, args.ClientArgs)
+	if err != nil {
+		return nil, err
+	}
+	outer.Conn = sharknado.NewSharknadoConn(internal, outer.GetDummyTraffic, serverSeed)
+	c.Conn = outer
+	return
 }
 
 func init() {
