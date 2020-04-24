@@ -38,6 +38,7 @@ import (
 	"gitlab.com/yawning/obfs4.git/transports/obfs2"
 	"gitlab.com/yawning/obfs4.git/transports/obfs3"
 	"gitlab.com/yawning/obfs4.git/transports/obfs4"
+	"gitlab.com/yawning/obfs4.git/transports/obfs5"
 	"gitlab.com/yawning/obfs4.git/transports/scramblesuit"
 )
 
@@ -89,6 +90,7 @@ func Init() error {
 		new(obfs2.Transport),
 		new(obfs3.Transport),
 		new(obfs4.Transport),
+		new(obfs5.Transport),
 		new(scramblesuit.Transport),
 	} {
 		if err := Register(v); err != nil {

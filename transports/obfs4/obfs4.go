@@ -84,7 +84,7 @@ const (
 // uniformly distributed.
 var biasedDist bool
 
-type obfs4ClientArgs struct {
+type ClientArgs struct {
 	nodeID     *ntor.NodeID
 	publicKey  *ntor.PublicKey
 	sessionKey *ntor.Keypair
@@ -99,13 +99,13 @@ func (t *Transport) Name() string {
 	return transportName
 }
 
-// ClientFactory returns a new obfs4ClientFactory instance.
+// ClientFactory returns a new ClientFactory instance.
 func (t *Transport) ClientFactory(stateDir string) (base.ClientFactory, error) {
-	cf := &obfs4ClientFactory{transport: t}
+	cf := &ClientFactory{transport: t}
 	return cf, nil
 }
 
-// ServerFactory returns a new obfs4ServerFactory instance.
+// ServerFactory returns a new ServerFactory instance.
 func (t *Transport) ServerFactory(stateDir string, args *pt.Args) (base.ServerFactory, error) {
 	st, err := serverStateFromArgs(stateDir, args)
 	if err != nil {
@@ -140,15 +140,15 @@ func (t *Transport) ServerFactory(stateDir string, args *pt.Args) (base.ServerFa
 	}
 	rng := rand.New(drbg)
 
-	sf := &obfs4ServerFactory{t, &ptArgs, st.nodeID, st.identityKey, st.drbgSeed, iatSeed, st.iatMode, filter, rng.Intn(maxCloseDelay)}
+	sf := &ServerFactory{t, &ptArgs, st.nodeID, st.identityKey, st.drbgSeed, iatSeed, st.iatMode, filter, rng.Intn(maxCloseDelay)}
 	return sf, nil
 }
 
-type obfs4ClientFactory struct {
+type ClientFactory struct {
 	transport base.Transport
 }
 
-func (cf *obfs4ClientFactory) Transport() base.Transport {
+func (cf *ClientFactory) Transport() base.Transport {
 	return cf.transport
 }
 
@@ -185,7 +185,7 @@ func ParseCert(args *pt.Args) (nodeID *ntor.NodeID, publicKey *ntor.PublicKey, e
 	return nodeID, publicKey, nil
 }
 
-func (cf *obfs4ClientFactory) ParseArgs(args *pt.Args) (interface{}, error) {
+func (cf *ClientFactory) ParseArgs(args *pt.Args) (interface{}, error) {
 	nodeID, publicKey, err := ParseCert(args)
 	if err != nil {
 		return nil, err
@@ -208,12 +208,12 @@ func (cf *obfs4ClientFactory) ParseArgs(args *pt.Args) (interface{}, error) {
 		return nil, err
 	}
 
-	return &obfs4ClientArgs{nodeID, publicKey, sessionKey, iatMode}, nil
+	return &ClientArgs{nodeID, publicKey, sessionKey, iatMode}, nil
 }
 
-func (cf *obfs4ClientFactory) Dial(network, addr string, dialFn base.DialFunc, args interface{}) (net.Conn, error) {
+func (cf *ClientFactory) Dial(network, addr string, dialFn base.DialFunc, args interface{}) (net.Conn, error) {
 	// Validate args before bothering to open connection.
-	ca, ok := args.(*obfs4ClientArgs)
+	ca, ok := args.(*ClientArgs)
 	if !ok {
 		return nil, fmt.Errorf("invalid argument type for args")
 	}
@@ -222,14 +222,14 @@ func (cf *obfs4ClientFactory) Dial(network, addr string, dialFn base.DialFunc, a
 		return nil, err
 	}
 	dialConn := conn
-	if conn, err = newObfs4ClientConn(conn, ca); err != nil {
+	if conn, err = newClientConn(conn, ca); err != nil {
 		dialConn.Close()
 		return nil, err
 	}
 	return conn, nil
 }
 
-type obfs4ServerFactory struct {
+type ServerFactory struct {
 	transport base.Transport
 	args      *pt.Args
 
@@ -243,16 +243,16 @@ type obfs4ServerFactory struct {
 	closeDelay int
 }
 
-func (sf *obfs4ServerFactory) Transport() base.Transport {
+func (sf *ServerFactory) Transport() base.Transport {
 	return sf.transport
 }
 
-func (sf *obfs4ServerFactory) Args() *pt.Args {
+func (sf *ServerFactory) Args() *pt.Args {
 	return sf.args
 }
 
-func (sf *obfs4ServerFactory) WrapConn(conn net.Conn) (net.Conn, error) {
-	// Not much point in having a separate newObfs4ServerConn routine when
+func (sf *ServerFactory) WrapConn(conn net.Conn) (net.Conn, error) {
+	// Not much point in having a separate newServerConn routine when
 	// wrapping requires using values from the factory instance.
 
 	// Generate the session keypair *before* consuming data from the peer, to
@@ -271,7 +271,7 @@ func (sf *obfs4ServerFactory) WrapConn(conn net.Conn) (net.Conn, error) {
 		iatDist = probdist.New(sf.iatSeed, 0, maxIATDelay, biasedDist)
 	}
 
-	c := &obfs4Conn{conn, true, lenDist, iatDist, sf.iatMode, nil, nil, false}
+	c := &Conn{conn, true, lenDist, iatDist, sf.iatMode, nil, nil, false}
 
 	startTime := time.Now()
 
@@ -283,7 +283,7 @@ func (sf *obfs4ServerFactory) WrapConn(conn net.Conn) (net.Conn, error) {
 	return c, nil
 }
 
-type obfs4Conn struct {
+type Conn struct {
 	net.Conn
 
 	isServer bool
@@ -298,7 +298,7 @@ type obfs4Conn struct {
 	connEstablished bool
 }
 
-func newObfs4ClientConn(conn net.Conn, args *obfs4ClientArgs) (c *obfs4Conn, err error) {
+func newClientConn(conn net.Conn, args *ClientArgs) (c *Conn, err error) {
 	// Generate the initial protocol polymorphism distribution(s).
 	var seed *drbg.Seed
 	if seed, err = drbg.NewSeed(); err != nil {
@@ -316,7 +316,7 @@ func newObfs4ClientConn(conn net.Conn, args *obfs4ClientArgs) (c *obfs4Conn, err
 	}
 
 	// Allocate the client structure.
-	c = &obfs4Conn{conn, false, lenDist, iatDist, args.iatMode, nil, nil, false}
+	c = &Conn{conn, false, lenDist, iatDist, args.iatMode, nil, nil, false}
 
 	// Start the handshake timeout.
 	deadline := time.Now().Add(clientHandshakeTimeout)
@@ -336,7 +336,7 @@ func newObfs4ClientConn(conn net.Conn, args *obfs4ClientArgs) (c *obfs4Conn, err
 	return
 }
 
-func (conn *obfs4Conn) clientHandshake(nodeID *ntor.NodeID, peerIdentityKey *ntor.PublicKey, sessionKey *ntor.Keypair) error {
+func (conn *Conn) clientHandshake(nodeID *ntor.NodeID, peerIdentityKey *ntor.PublicKey, sessionKey *ntor.Keypair) error {
 	if conn.isServer {
 		return fmt.Errorf("clientHandshake called on server connection")
 	}
@@ -389,13 +389,13 @@ func newEncoder(key []byte) *framing.ObfsEncoder {
 	return encoder
 }
 
-func (conn *obfs4Conn) newDecoder(key []byte) {
+func (conn *Conn) newDecoder(key []byte) {
 	decoder := framing.NewObfsDecoder(key)
 	decoder.PrngRegen = conn.prngRegen
 	conn.decoder = decoder
 }
 
-func (conn *obfs4Conn) serverHandshake(sf *obfs4ServerFactory, sessionKey *ntor.Keypair) error {
+func (conn *Conn) serverHandshake(sf *ServerFactory, sessionKey *ntor.Keypair) error {
 	if !conn.isServer {
 		return fmt.Errorf("serverHandshake called on client connection")
 	}
@@ -469,10 +469,10 @@ func (conn *obfs4Conn) serverHandshake(sf *obfs4ServerFactory, sessionKey *ntor.
 	return nil
 }
 
-func (conn *obfs4Conn) Read(b []byte) (n int, err error) {
+func (conn *Conn) Read(b []byte) (n int, err error) {
 	return conn.decoder.Read(b, conn.Conn)
 }
-func (conn *obfs4Conn) prngRegen(payload []byte) error {
+func (conn *Conn) prngRegen(payload []byte) error {
 	// Only regenerate the distribution if we are the client.
 	if len(payload) == SeedPacketPayloadLength && conn.isServer {
 		seed, err := drbg.SeedFromBytes(payload)
@@ -492,7 +492,7 @@ func (conn *obfs4Conn) prngRegen(payload []byte) error {
 	return nil
 }
 
-func (conn *obfs4Conn) Write(b []byte) (n int, err error) {
+func (conn *Conn) Write(b []byte) (n int, err error) {
 	var frameBuf bytes.Buffer
 	frameBuf, n, err = conn.encoder.Chop(b, framing.PacketTypePayload)
 	if err != nil {
@@ -568,15 +568,15 @@ func (conn *obfs4Conn) Write(b []byte) (n int, err error) {
 	return
 }
 
-func (conn *obfs4Conn) SetDeadline(t time.Time) error {
+func (conn *Conn) SetDeadline(t time.Time) error {
 	return syscall.ENOTSUP
 }
 
-func (conn *obfs4Conn) SetWriteDeadline(t time.Time) error {
+func (conn *Conn) SetWriteDeadline(t time.Time) error {
 	return syscall.ENOTSUP
 }
 
-func (conn *obfs4Conn) closeAfterDelay(sf *obfs4ServerFactory, startTime time.Time) {
+func (conn *Conn) closeAfterDelay(sf *ServerFactory, startTime time.Time) {
 	// I-it's not like I w-wanna handshake with you or anything.  B-b-baka!
 	defer conn.Conn.Close()
 
@@ -595,7 +595,7 @@ func (conn *obfs4Conn) closeAfterDelay(sf *obfs4ServerFactory, startTime time.Ti
 	_, _ = io.Copy(ioutil.Discard, conn.Conn)
 }
 
-func (conn *obfs4Conn) padBurst(burst *bytes.Buffer, toPadTo int) (err error) {
+func (conn *Conn) padBurst(burst *bytes.Buffer, toPadTo int) (err error) {
 	tailLen := burst.Len() % f.MaximumSegmentLength
 
 	padLen := 0
@@ -624,11 +624,45 @@ func (conn *obfs4Conn) padBurst(burst *bytes.Buffer, toPadTo int) (err error) {
 	return
 }
 
+// getDummyTraffic must be of type sharknado.DummyTrafficFunc and return `n`
+// bytes of dummy traffic that's ready to be written to the wire.
+func (conn *Conn) getDummyTraffic(n int) ([]byte, error) {
+
+	// We're still busy with the handshake and haven't determined our shared
+	// secret yet.  We therefore cannot send dummy traffic just yet.
+	if !conn.connEstablished {
+		return nil, fmt.Errorf("Connection not yet established.  No dummy traffic available.")
+	}
+
+	var overhead = framing.FrameOverhead + conn.encoder.PacketOverhead
+	var frameBuf bytes.Buffer
+	for n > conn.encoder.MaxPacketPayloadLength {
+		err := conn.encoder.MakePacket(&frameBuf, obfs4.MakePayload(framing.PacketTypePayload, nil, uint16(conn.encoder.MaxPacketPayloadLength)))
+		if err != nil {
+			return nil, err
+		}
+		n -= conn.encoder.MaxPacketPayloadLength + overhead
+	}
+	// Do we have enough remaining padding to fit it into a new frame?  If not,
+	// let's just create an empty frame.
+	if n < overhead {
+		log.Debugf("Remaining n < frame overhead.")
+		n = overhead
+	}
+	err := conn.encoder.MakePacket(&frameBuf, obfs4.MakePayload(framing.PacketTypePayload, nil, uint16(n-overhead)))
+	if err != nil {
+		return nil, err
+	}
+	log.Debugf("Size of dummy traffic buffer: %d", frameBuf.Len())
+	return frameBuf.Bytes(), nil
+}
+
+
 func init() {
 	flag.BoolVar(&biasedDist, biasCmdArg, false, "Enable obfs4 using ScrambleSuit style table generation")
 }
 
-var _ base.ClientFactory = (*obfs4ClientFactory)(nil)
-var _ base.ServerFactory = (*obfs4ServerFactory)(nil)
+var _ base.ClientFactory = (*ClientFactory)(nil)
+var _ base.ServerFactory = (*ServerFactory)(nil)
 var _ base.Transport = (*Transport)(nil)
-var _ net.Conn = (*obfs4Conn)(nil)
+var _ net.Conn = (*Conn)(nil)
