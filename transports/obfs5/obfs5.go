@@ -1,4 +1,4 @@
-obfs5/*
+/*
  * Copyright (c) 2014, Yawning Angel <yawning at schwanenlied dot me>
  * All rights reserved.
  *
