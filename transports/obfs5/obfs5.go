@@ -78,7 +78,7 @@ type ClientFactory struct {
 
 func (cf *ClientFactory) Dial(network, addr string, dialFn base.DialFunc, args interface{}) (net.Conn, error) {
 	// Validate args before bothering to open connection.
-	ca, ok := args.(*ClientArgs)
+	ca, ok := args.(*obfs4.ClientArgs)
 	if !ok {
 		return nil, fmt.Errorf("invalid argument type for args")
 	}
@@ -87,7 +87,7 @@ func (cf *ClientFactory) Dial(network, addr string, dialFn base.DialFunc, args i
 		return nil, err
 	}
 	dialConn := conn
-	if conn, err = NewClientConn(conn, ca); err != nil {
+	if conn, err = NewClientConn(conn, &ClientArgs{ca}); err != nil {
 		dialConn.Close()
 		return nil, err
 	}
