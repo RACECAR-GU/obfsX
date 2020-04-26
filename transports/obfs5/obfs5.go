@@ -34,6 +34,7 @@ import (
 	"fmt"
 	"net"
 
+	"git.torproject.org/pluggable-transports/goptlib.git"
 	"gitlab.com/yawning/obfs4.git/common/drbg"
 	"gitlab.com/yawning/obfs4.git/transports/base"
 	"gitlab.com/yawning/obfs4.git/transports/obfs4"
@@ -72,22 +73,36 @@ func (t *Transport) ClientFactory(stateDir string) (base.ClientFactory, error) {
 	return cf, nil
 }
 
+// ServerFactory returns a new ServerFactory instance.
+func (t *Transport) ServerFactory(stateDir string, args *pt.Args) (s base.ServerFactory, err error) {
+	sf := new(ServerFactory)
+	subsf, err := obfs4.NewServerFactory(t, stateDir, args)
+	if err != nil {
+		return nil, err
+	}
+	sf.ServerFactory = subsf
+
+	return sf, nil
+}
+
 type ClientFactory struct {
 	*obfs4.ClientFactory
 }
 
 func (cf *ClientFactory) Dial(network, addr string, dialFn base.DialFunc, args interface{}) (net.Conn, error) {
 	// Validate args before bothering to open connection.
-	ca, ok := args.(*obfs4.ClientArgs)
+	ca := new(ClientArgs)
+	subca, ok := args.(*obfs4.ClientArgs)
 	if !ok {
 		return nil, fmt.Errorf("invalid argument type for args")
 	}
+	ca.ClientArgs = subca
 	conn, err := dialFn(network, addr)
 	if err != nil {
 		return nil, err
 	}
 	dialConn := conn
-	if conn, err = NewClientConn(conn, &ClientArgs{ca}); err != nil {
+	if conn, err = NewClientConn(conn, ca); err != nil {
 		dialConn.Close()
 		return nil, err
 	}
@@ -95,7 +110,7 @@ func (cf *ClientFactory) Dial(network, addr string, dialFn base.DialFunc, args i
 }
 
 type ServerFactory struct {
-	obfs4.ServerFactory
+	*obfs4.ServerFactory
 }
 
 func (sf *ServerFactory) WrapConn(conn net.Conn) (net.Conn, error) {
@@ -132,16 +147,18 @@ func NewClientConn(conn net.Conn, args *ClientArgs) (c *Conn, err error) {
 	}
 
 	// Allocate the client structure.
-	var internal net.Conn
-	internal, err = riverrun.NewRiverrunConn(conn, false, serverSeed)
+	rr, err := riverrun.NewRiverrunConn(conn, false, serverSeed)
 	if err != nil {
 		return nil, err
 	}
-	outer, err := obfs4.NewClientConn(internal, args.ClientArgs)
+	outer, err := obfs4.NewClientConn(rr, args.ClientArgs)
 	if err != nil {
 		return nil, err
 	}
-	outer.Conn = sharknado.NewSharknadoConn(internal, outer.GetDummyTraffic, serverSeed)
+	outer.Conn = sharknado.NewSharknadoConn(rr, outer.GetDummyTraffic, serverSeed)
+
+	//sn.GetDummyTraffic = outer.GetDummyTraffic
+	c = new(Conn)
 	c.Conn = outer
 	return
 }

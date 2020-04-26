@@ -11,6 +11,7 @@ import (
 
   "gitlab.com/yawning/obfs4.git/common/drbg"
   "gitlab.com/yawning/obfs4.git/common/csrand"
+  "gitlab.com/yawning/obfs4.git/common/log"
 )
 
 const (
@@ -65,21 +66,32 @@ type BaseEncoder struct {
   Encode encodeFunc
   ProcessLength processLengthFunc
   ChopPayload chopPayloadFunc
+
+  Type  string
 }
 
-
+// TODO: Only do this for riverrun encoder
 
 func (encoder *BaseEncoder) MakePacket(w io.Writer, payload []byte) error {
 	// Encode the packet in an AEAD frame.
 	var frame [MaximumSegmentLength]byte
   payloadLen := len(payload)
+  if encoder.Type == "rr" {
+      log.Debugf("Make: Raw payloadLen: %d", payloadLen)
+  }
   payloadLenWithOverhead0 := payloadLen+encoder.PayloadOverhead(payloadLen)
   if len(frame) - encoder.LengthLength < payloadLenWithOverhead0 {
 		return io.ErrShortBuffer
 	}
   length := uint16(payloadLenWithOverhead0)
+  if encoder.Type == "rr" {
+    log.Debugf("Make: PayloadLenWithOverhead: %d", length)
+  }
   lengthMask := encoder.Drbg.NextBlock()
 	length ^= binary.BigEndian.Uint16(lengthMask)
+  if encoder.Type == "rr" {
+    log.Debugf("Make: Length ID %d", length)
+  }
   processedLength, err := encoder.ProcessLength(length)
   if err != nil {
     return err
@@ -254,11 +266,19 @@ func (decoder *BaseDecoder) Decode(data []byte, frames *bytes.Buffer) (int, erro
 	  }
 	  // Deobfuscate the length field.
 	  length, err := decoder.DecodeLength(lengthlength)
+    // HACK: If this works...
+    //       This is preventing the error from arising, but it gets stuck...
+    if length == 0 {
+      log.Debugf("In the hack!")
+      return 0, ErrAgain
+    }
     if err != nil {
       return 0, err
     }
 	  lengthMask := decoder.Drbg.NextBlock()
+    log.Debugf("length id: %d", length)
 	  length ^= binary.BigEndian.Uint16(lengthMask)
+    log.Debugf("First nextLength: %d", length)
 	  if MaximumSegmentLength - int(decoder.LengthLength) < int(length) || decoder.MinPayloadLength > int(length) {
 	    // Per "Plaintext Recovery Attacks Against SSH" by
 	    // Martin R. Albrecht, Kenneth G. Paterson and Gaven J. Watson,
@@ -270,10 +290,11 @@ func (decoder *BaseDecoder) Decode(data []byte, frames *bytes.Buffer) (int, erro
 	    // by pretending that the length was a random valid range as per
 	    // the countermeasure suggested by Denis Bider in section 6 of the
 	    // paper.
-
+      log.Debugf("Bad length")
 	    decoder.NextLengthInvalid = true
 	    length = uint16(csrand.IntRange(decoder.MinPayloadLength, MaximumSegmentLength - int(decoder.LengthLength)))
 	  }
+    log.Debugf("Out nextLength: %d", length)
 	  decoder.NextLength = length
 	}
 

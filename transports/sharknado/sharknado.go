@@ -114,16 +114,19 @@ func (sn *SharknadoConn) heartbeat(interval int) {
 	log.Debugf("Sending %d bytes of heartbeat dummy traffic.", numBytes)
 	for {
 		time.Sleep(duration)
-		data, err := sn.GetDummyTraffic(numBytes)
-		if err != nil {
-			log.Debugf("Error while getting dummy traffic.")
-			continue
-		}
-		log.Debugf("Sending %d bytes of heartbeat data.", len(data))
-		_, err = sn.Conn.Write(data)
-		if err != nil {
-			log.Debugf("Error while writing. Stopping heartbeat.")
-			return
+		if sn.GetDummyTraffic != nil { // IDEA: Intuitively, I feel like this could be fixed...
+																	// e.g. perhaps make "established" a more universal var for conns...
+			data, err := sn.GetDummyTraffic(numBytes)
+			if err != nil {
+				log.Debugf("Error while getting dummy traffic.")
+				continue
+			}
+			log.Debugf("Sending %d bytes of heartbeat data.", len(data))
+			_, err = sn.Conn.Write(data)
+			if err != nil {
+				log.Debugf("Error while writing. Stopping heartbeat.")
+				return
+			}
 		}
 	}
 }
@@ -131,7 +134,7 @@ func (sn *SharknadoConn) heartbeat(interval int) {
 func (sn *SharknadoConn) Write(b []byte) (int, error) {
 
 	n, err := sn.Conn.Write(b)
-	log.Debugf("Sharknado: %d ->", n)
+	// log.Debugf("Sharknado: %d ->", n)
 	return n, err
 }
 
@@ -139,7 +142,7 @@ func (sn *SharknadoConn) Read(b []byte) (int, error) {
 
 	n, err := sn.Conn.Read(b)
 	sn.bytesRcvd += n
-	log.Debugf("Sharknado: <- %d", n)
+	// log.Debugf("Sharknado: <- %d", n)
 
 	if sn.shouldBreakBurst() {
 		if _, err2 := sn.sendDummyTraffic(); err2 != nil {
