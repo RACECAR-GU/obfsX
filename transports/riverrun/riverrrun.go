@@ -152,8 +152,11 @@ func (encoder *riverrunEncoder) processLength(length uint16) ([]byte, error) {
 }
 
 func (encoder *riverrunEncoder) encode(frame, payload []byte) (n int, err error) {
+  tb := rand.Int()
   expandedNBytes := int(ctstretch.ExpandedNBytes(uint64(len(payload)), encoder.compressedBlockBits, encoder.expandedBlockBits))
-  err = ctstretch.ExpandBytes(payload[:], frame, encoder.compressedBlockBits, encoder.expandedBlockBits, encoder.table16, encoder.table8, encoder.writeStream)
+  frameLen := encoder.LengthLength + expandedNBytes
+  log.Debugf("Encoding frame of length %d, with payload of length %d. TB: %d", frameLen, expandedNBytes, tb)
+  err = ctstretch.ExpandBytes(payload[:], frame, encoder.compressedBlockBits, encoder.expandedBlockBits, encoder.table16, encoder.table8, encoder.writeStream, tb)
   if err != nil {
     return 0, err
   }

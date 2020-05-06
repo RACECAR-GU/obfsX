@@ -76,22 +76,13 @@ func (encoder *BaseEncoder) MakePacket(w io.Writer, payload []byte) error {
 	// Encode the packet in an AEAD frame.
 	var frame [MaximumSegmentLength]byte
   payloadLen := len(payload)
-  if encoder.Type == "rr" {
-      log.Debugf("Make: Raw payloadLen: %d", payloadLen)
-  }
   payloadLenWithOverhead0 := payloadLen+encoder.PayloadOverhead(payloadLen)
   if len(frame) - encoder.LengthLength < payloadLenWithOverhead0 {
 		return io.ErrShortBuffer
 	}
   length := uint16(payloadLenWithOverhead0)
-  if encoder.Type == "rr" {
-    log.Debugf("Make: PayloadLenWithOverhead: %d", length)
-  }
   lengthMask := encoder.Drbg.NextBlock()
 	length ^= binary.BigEndian.Uint16(lengthMask)
-  if encoder.Type == "rr" {
-    log.Debugf("Make: Length ID %d", length)
-  }
   processedLength, err := encoder.ProcessLength(length)
   if err != nil {
     return err

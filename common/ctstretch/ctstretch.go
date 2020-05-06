@@ -170,7 +170,7 @@ func BytesToUInt16(data []byte, startIDx, endIDx uint64) (uint16, error) {
 	return binary.BigEndian.Uint16(data[startIDx:endIDx]), nil
 }
 
-func ExpandBytes(src, dst []byte, inputBlockBits, outputBlockBits uint64, table16, table8 []uint64, stream cipher.Stream) error {
+func ExpandBytes(src, dst []byte, inputBlockBits, outputBlockBits uint64, table16, table8 []uint64, stream cipher.Stream, tb int) error {
 
 	if inputBlockBits != 8 && inputBlockBits != 16 {
 		return fmt.Errorf("ctstretch/bit_manip: input bit block size must be 8 or 16")
@@ -195,12 +195,13 @@ func ExpandBytes(src, dst []byte, inputBlockBits, outputBlockBits uint64, table1
 	outputBlockBytes := outputBlockBits / 8
 
 	if inputBlockBits == 16 && srcNBytes%2 == 1 {
-		err := ExpandBytes(src[0:srcNBytes-1], dst[0:uint64(srcNBytes-1)*outputBlockBytes/inputBlockBytes], inputBlockBits, outputBlockBits, table16, table8, stream)
+		err := ExpandBytes(src[0:srcNBytes-1], dst[0:uint64(srcNBytes-1)*outputBlockBytes/inputBlockBytes], inputBlockBits, outputBlockBits, table16, table8, stream, tb)
 		if err != nil {
 			return err
 		}
-		return ExpandBytes(src[srcNBytes-1:], dst[uint64(srcNBytes-1)*outputBlockBytes/inputBlockBytes:], 8, outputBlockBits/2, table16, table8, stream)
+		return ExpandBytes(src[srcNBytes-1:], dst[uint64(srcNBytes-1)*outputBlockBytes/inputBlockBytes:], 8, outputBlockBits/2, table16, table8, stream, tb)
 	}
+	log.Debugf("Expanding to %f, tb: %d", uint64(srcNBytes)*outputBlockBytes/inputBlockBytes, tb)
 
 	var table *[]uint64
 	if inputBlockBits == 8 {
@@ -246,6 +247,7 @@ func ExpandBytes(src, dst []byte, inputBlockBits, outputBlockBits uint64, table1
 }
 
 func CompressBytes(src, dst []byte, inputBlockBits, outputBlockBits uint64, inversion16, inversion8 map[uint64]uint64, stream cipher.Stream, tb int) error {
+	// XXX: tb is for tracing purposes. Remove before release.
 	srcNBytes := len(src) // 1: 1074 2: 2
 	log.Debugf("srcNBytes: %d, iBB: %d, oBB: %d, tb: %d", srcNBytes, inputBlockBits, outputBlockBits, tb)
 	if inputBlockBits%8 != 0 || inputBlockBits > 64 {
