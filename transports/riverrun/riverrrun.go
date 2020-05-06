@@ -254,7 +254,7 @@ func (decoder *riverrunDecoder) decodePayload(frames *bytes.Buffer) ([]byte, err
 }
 
 func (decoder *riverrunDecoder) compressBytes(raw, res []byte) error {
-  return ctstretch.CompressBytes(raw, res, decoder.expandedBlockBits, decoder.compressedBlockBits, decoder.revTable16, decoder.revTable8, decoder.readStream)
+  return ctstretch.CompressBytes(raw, res, decoder.expandedBlockBits, decoder.compressedBlockBits, decoder.revTable16, decoder.revTable8, decoder.readStream, rand.Int())
 }
 
 func (rr *RiverrunConn) Write(b []byte) (n int, err error) {

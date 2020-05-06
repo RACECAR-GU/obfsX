@@ -245,13 +245,14 @@ func ExpandBytes(src, dst []byte, inputBlockBits, outputBlockBits uint64, table1
 	return nil
 }
 
-func CompressBytes(src, dst []byte, inputBlockBits, outputBlockBits uint64, inversion16, inversion8 map[uint64]uint64, stream cipher.Stream) error {
+func CompressBytes(src, dst []byte, inputBlockBits, outputBlockBits uint64, inversion16, inversion8 map[uint64]uint64, stream cipher.Stream, tb int) error {
 	srcNBytes := len(src) // 1: 1074 2: 2
+	log.Debugf("srcNBytes: %d, iBB: %d, oBB: %d, tb: %d", srcNBytes, inputBlockBits, outputBlockBits, tb)
 	if inputBlockBits%8 != 0 || inputBlockBits > 64 {
 		return fmt.Errorf("ctstretch/bit_manip: input block size must be a multiple of 8 and less than 64")
 	}
 	if outputBlockBits != 8 && outputBlockBits != 16 {
-		return fmt.Errorf("ctstretch/bit_manip: output bit block size must be 8 or 16, currently is %d, with input block size at %d, and len(src) %d", outputBlockBits, inputBlockBits, srcNBytes)
+		return fmt.Errorf("ctstretch/bit_manip: output bit block size must be 8 or 16, currently is %d, with input block size at %d, and len(src) %d. Traceback id: %d", outputBlockBits, inputBlockBits, srcNBytes, tb)
 	}
 
 	// 4 output bits, 16 input bits, 3 total bytes
@@ -267,20 +268,17 @@ func CompressBytes(src, dst []byte, inputBlockBits, outputBlockBits uint64, inve
 
 	blocks := uint64(srcNBytes) / inputBlockBytes // 1: 134 2: 0
 	if (uint64(srcNBytes) % inputBlockBytes) != 0 { // 1: True (=2) 2: True (=2)
-		if outputBlockBits/2 == 4 { // 1: False 2: True
-			log.Debugf("src is %b", srcNBytes) // 2: 2
-		}
 		if blocks == 0 { // 1: False // 2: True
-			return CompressBytes(src, dst, inputBlockBits/2, outputBlockBits/2, inversion16, inversion8, stream)
+			return CompressBytes(src, dst, inputBlockBits/2, outputBlockBits/2, inversion16, inversion8, stream, tb)
 		}
 
 		endSrc := blocks * inputBlockBytes // 1072
 		endDst := blocks * outputBlockBytes // 268
-		err := CompressBytes(src[0:endSrc], dst[0:endDst], inputBlockBits, outputBlockBits, inversion16, inversion8, stream)
+		err := CompressBytes(src[0:endSrc], dst[0:endDst], inputBlockBits, outputBlockBits, inversion16, inversion8, stream, tb)
 		if err != nil {
 			return err
 		}
-		return CompressBytes(src[endSrc:], dst[endDst:], inputBlockBits/2, outputBlockBits/2, inversion16, inversion8, stream)
+		return CompressBytes(src[endSrc:], dst[endDst:], inputBlockBits/2, outputBlockBits/2, inversion16, inversion8, stream, tb)
 
 	}
 
