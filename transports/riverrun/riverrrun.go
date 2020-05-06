@@ -186,7 +186,7 @@ func newRiverrunDecoder(key []byte, readStream cipher.Stream, revTable8, revTabl
 
   decoder.Drbg = f.GenDrbg(key[:])
   decoder.LengthLength = int(ctstretch.ExpandedNBytes(uint64(f.LengthLength), compressedBlockBits, expandedBlockBits))
-  decoder.MinPayloadLength = decoder.LengthLength
+  decoder.MinPayloadLength = int(ctstretch.ExpandedNBytes(uint64(1), compressedBlockBits, expandedBlockBits))
   decoder.PacketOverhead = 0 // f.LengthLength
   decoder.MaxFramePayloadLength = f.MaximumSegmentLength - decoder.LengthLength
 

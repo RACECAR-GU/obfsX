@@ -261,7 +261,7 @@ func (decoder *BaseDecoder) Decode(data []byte, frames *bytes.Buffer) (int, erro
       return 0, err
     }
 	  lengthMask := decoder.Drbg.NextBlock()
-    log.Debugf("length id: %d", length)
+    log.Debugf("length (raw): %d, length (mask): %d", length, lengthMask)
 	  length ^= binary.BigEndian.Uint16(lengthMask)
     log.Debugf("First nextLength: %d", length)
 	  if MaximumSegmentLength - int(decoder.LengthLength) < int(length) || decoder.MinPayloadLength > int(length) {
