@@ -25,7 +25,7 @@ const (
 
 	// Start a heartbeat with probability 1/heartbeatDenominator.  Also an
 	// arbitrary number.
-	heartbeatDenominator = 5
+	heartbeatDenominator = 2
 )
 
 // DummyTrafficFunc must be implemented by transports that want to use

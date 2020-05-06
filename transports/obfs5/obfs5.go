@@ -157,7 +157,6 @@ func NewClientConn(conn net.Conn, args *ClientArgs) (c *Conn, err error) {
 	}
 	outer.Conn = sharknado.NewSharknadoConn(rr, outer.GetDummyTraffic, serverSeed)
 
-	//sn.GetDummyTraffic = outer.GetDummyTraffic
 	c = new(Conn)
 	c.Conn = outer
 	return
