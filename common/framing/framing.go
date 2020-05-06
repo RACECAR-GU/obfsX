@@ -266,12 +266,6 @@ func (decoder *BaseDecoder) Decode(data []byte, frames *bytes.Buffer) (int, erro
 	  }
 	  // Deobfuscate the length field.
 	  length, err := decoder.DecodeLength(lengthlength)
-    // HACK: If this works...
-    //       This is preventing the error from arising, but it gets stuck...
-    if length == 0 {
-      log.Debugf("In the hack!")
-      return 0, ErrAgain
-    }
     if err != nil {
       return 0, err
     }
