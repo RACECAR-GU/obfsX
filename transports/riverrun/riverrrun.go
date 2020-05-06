@@ -147,7 +147,7 @@ func (encoder *riverrunEncoder) processLength(length uint16) ([]byte, error) {
   lengthBytes := make([]byte, f.LengthLength)
   binary.BigEndian.PutUint16(lengthBytes[:], length)
   lengthBytesEncoded := make([]byte, encoder.LengthLength)
-  err := ctstretch.ExpandBytes(lengthBytes[:], lengthBytesEncoded, encoder.compressedBlockBits, encoder.expandedBlockBits, encoder.table16, encoder.table8, encoder.writeStream)
+  err := ctstretch.ExpandBytes(lengthBytes[:], lengthBytesEncoded, encoder.compressedBlockBits, encoder.expandedBlockBits, encoder.table16, encoder.table8, encoder.writeStream, rand.Int())
   return lengthBytesEncoded, err
 }
 
