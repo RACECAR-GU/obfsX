@@ -30,8 +30,6 @@ type RiverrunConn struct {
 }
 
 func NewRiverrunConn(conn net.Conn, isServer bool, seed *drbg.Seed) (*RiverrunConn, error) {
-  // FIXME: Bias was arbitrarily selected
-  bias := float64(0.55)
 
   xdrbg, err := drbg.NewHashDrbg(seed)
   if err != nil {
@@ -64,6 +62,10 @@ func NewRiverrunConn(conn net.Conn, isServer bool, seed *drbg.Seed) (*RiverrunCo
 		expandedBlockBits = uint64((rng.Intn(3)+2) * 16)
     expandedBlockBits8 = compressedBlockBits / 2
 	}
+
+  bias := rng.Float64() * .7 + .15
+
+  log.Infof("rr: Set bias to %f, compressed block bits to %d, expanded block bits to %d", bias, expandedBlockBits, compressedBlockBits)
 
   table8, err := ctstretch.SampleBiasedStrings(expandedBlockBits8, 256, bias, stream)
   if err != nil {
