@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"math"
 	"unsafe"
+
+	"gitlab.com/yawning/obfs4.git/common/log"
 )
 
 // Swaps bits i and j in data.  Bit 0 is the first bit of data[0].
@@ -168,47 +170,38 @@ func BytesToUInt16(data []byte, startIDx, endIDx uint64) (uint16, error) {
 	return binary.BigEndian.Uint16(data[startIDx:endIDx]), nil
 }
 
-func ExpandBytes(src, dst []byte, inputBlockBits, outputBlockBits uint64, table16, table8 []uint64, stream cipher.Stream) error {
+func ExpandBytes(src, dst []byte, inputBlockBits, outputBlockBits uint64, table16, table8 []uint64, stream cipher.Stream, tb int) error {
 
 	if inputBlockBits != 8 && inputBlockBits != 16 {
 		return fmt.Errorf("ctstretch/bit_manip: input bit block size must be 8 or 16")
 	}
-	if outputBlockBits%8 != 0 || outputBlockBits > 64 {
-		return fmt.Errorf("ctstretch/bit_manip: output block size must be a multiple of 8 and less than 64") // TODO: Change to error
+	if outputBlockBits%8 != 0 || outputBlockBits > 64 || outputBlockBits == 0 {
+		return fmt.Errorf("ctstretch/bit_manip: output block size must be a multiple of 8, less than or equal to 64, and greater than 0")
 	}
 
 	srcNBytes := len(src)
-	//dstNBytes := len(dst)
-
-	inputBlockBytes := inputBlockBits / 8
-	outputBlockBytes := outputBlockBits / 8
-
-	//expansionFactor := float64(outputBlockBits) / float64(inputBlockBits)
 
 	if srcNBytes == 0 {
 		return nil
 	}
 
-	if srcNBytes == 1 && inputBlockBits == 16 {
-		return ExpandBytes(src, dst, 8, outputBlockBits/2, table16, table8, stream)
+	expansionFactor := float64(outputBlockBits) / float64(inputBlockBits)
+
+	if float64(len(dst))/float64(srcNBytes) < expansionFactor {
+		return fmt.Errorf("ctstretch/bit_manip: dst has insufficient size")
 	}
 
-	if inputBlockBits == 16 && srcNBytes > 1 && srcNBytes%2 == 1 {
-		err := ExpandBytes(src[0:srcNBytes-1], dst[0:uint64(srcNBytes-1)*outputBlockBytes/inputBlockBytes], inputBlockBits, outputBlockBits, table16, table8, stream)
+	inputBlockBytes := inputBlockBits / 8
+	outputBlockBytes := outputBlockBits / 8
+
+	if inputBlockBits == 16 && srcNBytes%2 == 1 {
+		err := ExpandBytes(src[0:srcNBytes-1], dst[0:uint64(srcNBytes-1)*outputBlockBytes/inputBlockBytes], inputBlockBits, outputBlockBits, table16, table8, stream, tb)
 		if err != nil {
 			return err
 		}
-		return ExpandBytes(src[srcNBytes-1:], dst[uint64(srcNBytes-1)*outputBlockBytes/inputBlockBytes:], 8, outputBlockBits/2, table16, table8, stream)
+		return ExpandBytes(src[srcNBytes-1:], dst[uint64(srcNBytes-1)*outputBlockBytes/inputBlockBytes:], 8, outputBlockBits/2, table16, table8, stream, tb)
 	}
-
-	/*
-		if float64(dstNBytes)/float64(srcNBytes) < expansionFactor {
-			fmt.Println(dstNBytes)
-			fmt.Println(srcNBytes)
-			fmt.Println(expansionFactor)
-			panic("ctstretch/bit_manip: dst has insufficient size")
-		}
-	*/
+	log.Debugf("Expanding to %f, tb: %d", uint64(srcNBytes)*outputBlockBytes/inputBlockBytes, tb)
 
 	var table *[]uint64
 	if inputBlockBits == 8 {
@@ -253,36 +246,42 @@ func ExpandBytes(src, dst []byte, inputBlockBits, outputBlockBits uint64, table1
 	return nil
 }
 
-func CompressBytes(src, dst []byte, inputBlockBits, outputBlockBits uint64, inversion16, inversion8 map[uint64]uint64, stream cipher.Stream) error {
+func CompressBytes(src, dst []byte, inputBlockBits, outputBlockBits uint64, inversion16, inversion8 map[uint64]uint64, stream cipher.Stream, tb int) error {
+	// XXX: tb is for tracing purposes. Remove before release.
+	srcNBytes := len(src) // 1: 1074 2: 2
+	log.Debugf("srcNBytes: %d, iBB: %d, oBB: %d, tb: %d", srcNBytes, inputBlockBits, outputBlockBits, tb)
 	if inputBlockBits%8 != 0 || inputBlockBits > 64 {
 		return fmt.Errorf("ctstretch/bit_manip: input block size must be a multiple of 8 and less than 64")
 	}
 	if outputBlockBits != 8 && outputBlockBits != 16 {
-		return fmt.Errorf("ctstretch/bit_manip: output bit block size must be 8 or 16")
+		return fmt.Errorf("ctstretch/bit_manip: output bit block size must be 8 or 16, currently is %d, with input block size at %d, and len(src) %d. Traceback id: %d", outputBlockBits, inputBlockBits, srcNBytes, tb)
 	}
 
-	srcNBytes := len(src)
+	// 4 output bits, 16 input bits, 3 total bytes
+	// Previous call had 8 output bits, 32 input bits, 108 + 3 bytes
+	//									 1 output byte   4 input bytes
+
 	if float64(len(dst))/float64(srcNBytes) < float64(outputBlockBits) / float64(inputBlockBits) {
 		return fmt.Errorf("ctstretch/bit_manip: dst has insufficient size")
 	}
 
-	inputBlockBytes := inputBlockBits / 8
-	outputBlockBytes := outputBlockBits / 8
+	inputBlockBytes := inputBlockBits / 8 // 1: 8 2: 4
+	outputBlockBytes := outputBlockBits / 8 // 1: 2 2: 1
 
-	halfBlock := (uint64(srcNBytes) % inputBlockBytes) != 0
-	blocks := uint64(srcNBytes) / inputBlockBytes
-	if blocks == 0 && halfBlock {
-		return CompressBytes(src, dst, inputBlockBits/2, outputBlockBits/2, inversion16, inversion8, stream)
-	}
+	blocks := uint64(srcNBytes) / inputBlockBytes // 1: 134 2: 0
+	if (uint64(srcNBytes) % inputBlockBytes) != 0 { // 1: True (=2) 2: True (=2)
+		if blocks == 0 { // 1: False // 2: True
+			return CompressBytes(src, dst, inputBlockBits/2, outputBlockBits/2, inversion16, inversion8, stream, tb)
+		}
 
-	if blocks >= 1 && halfBlock {
-		endSrc := blocks * inputBlockBytes
-		endDst := blocks * outputBlockBytes
-		err := CompressBytes(src[0:endSrc], dst[0:endDst], inputBlockBits, outputBlockBits, inversion16, inversion8, stream)
+		endSrc := blocks * inputBlockBytes // 1072
+		endDst := blocks * outputBlockBytes // 268
+		err := CompressBytes(src[0:endSrc], dst[0:endDst], inputBlockBits, outputBlockBits, inversion16, inversion8, stream, tb)
 		if err != nil {
 			return err
 		}
-		return CompressBytes(src[endSrc:], dst[endDst:], inputBlockBits/2, outputBlockBits/2, inversion16, inversion8, stream)
+		return CompressBytes(src[endSrc:], dst[endDst:], inputBlockBits/2, outputBlockBits/2, inversion16, inversion8, stream, tb)
+
 	}
 
 	inputIdx := uint64(0)

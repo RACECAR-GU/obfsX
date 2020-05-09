@@ -106,8 +106,7 @@ func (t *Transport) ClientFactory(stateDir string) (base.ClientFactory, error) {
 	return cf, nil
 }
 
-// ServerFactory returns a new ServerFactory instance.
-func (t *Transport) ServerFactory(stateDir string, args *pt.Args) (base.ServerFactory, error) {
+func NewServerFactory(t base.Transport, stateDir string, args *pt.Args) (*ServerFactory, error) {
 	st, err := serverStateFromArgs(stateDir, args)
 	if err != nil {
 		return nil, err
@@ -143,6 +142,11 @@ func (t *Transport) ServerFactory(stateDir string, args *pt.Args) (base.ServerFa
 
 	sf := &ServerFactory{t, &ptArgs, st.nodeID, st.identityKey, st.drbgSeed, iatSeed, st.iatMode, filter, rng.Intn(maxCloseDelay)}
 	return sf, nil
+}
+
+// ServerFactory returns a new ServerFactory instance.
+func (t *Transport) ServerFactory(stateDir string, args *pt.Args) (base.ServerFactory, error) {
+	return NewServerFactory(t, stateDir, args)
 }
 
 type ClientFactory struct {
@@ -387,6 +391,7 @@ func newEncoder(key []byte) *framing.ObfsEncoder {
 	encoder := framing.NewObfsEncoder(key)
 	encoder.ChopPayload = MakeUnpaddedPayload
 	encoder.MaxPacketPayloadLength = MaxPacketPayloadLength
+	encoder.Type = "obfs4"
 	return encoder
 }
 
@@ -628,6 +633,11 @@ func (conn *Conn) padBurst(burst *bytes.Buffer, toPadTo int) (err error) {
 // getDummyTraffic must be of type sharknado.DummyTrafficFunc and return `n`
 // bytes of dummy traffic that's ready to be written to the wire.
 func (conn *Conn) GetDummyTraffic(n int) ([]byte, error) {
+	// IDEA: This would make a lot more sense as a generic
+	//			 function in sharknado.
+	//			 This would involve making MakePayload a function of the
+	//			 encoder - or creation of a MakePaddedPayload
+
 
 	// We're still busy with the handshake and haven't determined our shared
 	// secret yet.  We therefore cannot send dummy traffic just yet.

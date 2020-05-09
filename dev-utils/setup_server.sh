@@ -2,6 +2,7 @@
 
 # NOTE: Targets Bionic Beaver LTS
 # This script targets testing servers - I would not use it to spin up servers that are meant to be used in the wild.
+# TODO: Make command line option for OBFS4
 
 apt update
 
@@ -40,9 +41,9 @@ git clone git@github.com:RACECAR-GU/obfsX.git ~/obfsx
 
 cd ~/obfsx
 
-go build -o obfs4proxy/obfs4proxy ./obfs4proxy
+go build -o obfs4proxy/obfs5proxy ./obfs4proxy
 
-cp ~/obfsx/obfs4proxy/obfs4proxy /usr/bin/obfs4proxy
+cp ~/obfsx/obfs4proxy/obfs5proxy /usr/bin/obfs5proxy
 
 rm /etc/tor/torrc
 
@@ -59,11 +60,11 @@ PublishServerDescriptor 0
 # Avoid port 9001 because it's commonly associated with Tor and censors may be scanning the Internet for this port.
 ORPort 9999
 
-ServerTransportPlugin obfs4 exec /usr/bin/obfs4proxy
+ServerTransportPlugin obfs4,obfs5 exec /usr/bin/obfs5proxy -enableLogging=true -logLevel DEBUG
 
 # This port must be externally reachable and must be different from the one specified for ORPort.
 # Avoid port 9001 because it's commonly associated with Tor and censors may be scanning the Internet for this port.
-ServerTransportListenAddr obfs4 0.0.0.0:6666
+ServerTransportListenAddr obfs5 0.0.0.0:6666
 
 # Local communication port between Tor and obfs4.  Always set this to \"auto\".
 # \"Ext\" means \"extended\", not \"external\".  Don't try to set a specific port number, nor listen on 0.0.0.0.
