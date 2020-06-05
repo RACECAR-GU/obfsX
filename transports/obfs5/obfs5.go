@@ -38,7 +38,7 @@ import (
 	"gitlab.com/yawning/obfs4.git/common/drbg"
 	"gitlab.com/yawning/obfs4.git/transports/base"
 	"gitlab.com/yawning/obfs4.git/transports/obfs4"
-	//"gitlab.com/yawning/obfs4.git/transports/sharknado"
+	"gitlab.com/yawning/obfs4.git/transports/sharknado"
 	"gitlab.com/yawning/obfs4.git/transports/riverrun"
 )
 
@@ -155,7 +155,7 @@ func NewClientConn(conn net.Conn, args *ClientArgs) (c *Conn, err error) {
 	if err != nil {
 		return nil, err
 	}
-	//outer.Conn = sharknado.NewSharknadoConn(rr, outer.GetDummyTraffic, serverSeed)
+	outer.Conn = sharknado.NewSharknadoConn(rr, outer.GetDummyTraffic, serverSeed)
 
 	c = new(Conn)
 	c.Conn = outer
