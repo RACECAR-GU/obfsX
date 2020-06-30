@@ -86,10 +86,10 @@ const (
 var biasedDist bool
 
 type ClientArgs struct {
-	nodeID     *ntor.NodeID
+	NodeID     *ntor.NodeID
 	PublicKey  *ntor.PublicKey
-	sessionKey *ntor.Keypair
-	iatMode    int
+	SessionKey *ntor.Keypair
+	IatMode    int
 }
 
 // Transport is the obfs4 implementation of the base.Transport interface.
@@ -311,7 +311,7 @@ func NewClientConn(conn net.Conn, args *ClientArgs) (c *Conn, err error) {
 	}
 	lenDist := probdist.New(seed, 0, f.MaximumSegmentLength, biasedDist)
 	var iatDist *probdist.WeightedDist
-	if args.iatMode != iatNone {
+	if args.IatMode != iatNone {
 		var iatSeed *drbg.Seed
 		iatSeedSrc := sha256.Sum256(seed.Bytes()[:])
 		if iatSeed, err = drbg.SeedFromBytes(iatSeedSrc[:]); err != nil {
@@ -321,7 +321,7 @@ func NewClientConn(conn net.Conn, args *ClientArgs) (c *Conn, err error) {
 	}
 
 	// Allocate the client structure.
-	c = &Conn{conn, false, lenDist, iatDist, args.iatMode, nil, nil, false}
+	c = &Conn{conn, false, lenDist, iatDist, args.IatMode, nil, nil, false}
 
 	// Start the handshake timeout.
 	deadline := time.Now().Add(clientHandshakeTimeout)
@@ -329,7 +329,7 @@ func NewClientConn(conn net.Conn, args *ClientArgs) (c *Conn, err error) {
 		return nil, err
 	}
 
-	if err = c.clientHandshake(args.nodeID, args.PublicKey, args.sessionKey); err != nil {
+	if err = c.clientHandshake(args.NodeID, args.PublicKey, args.SessionKey); err != nil {
 		return nil, err
 	}
 
