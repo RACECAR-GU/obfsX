@@ -31,8 +31,8 @@ import (
 	"encoding/binary"
 	"fmt"
 
-	"gitlab.com/yawning/obfs4.git/transports/obfs4/framing"
-	f "gitlab.com/yawning/obfs4.git/common/framing"
+	"github.com/RACECAR-GU/obfsX.git/transports/obfs4/framing"
+	f "github.com/RACECAR-GU/obfsX.git/common/framing"
 )
 
 const (

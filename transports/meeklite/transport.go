@@ -29,8 +29,8 @@ import (
 	"strings"
 	"sync"
 
-	"gitlab.com/yawning/obfs4.git/common/log"
-	"gitlab.com/yawning/obfs4.git/transports/base"
+	"github.com/RACECAR-GU/obfsX.git/common/log"
+	"github.com/RACECAR-GU/obfsX.git/transports/base"
 	utls "gitlab.com/yawning/utls.git"
 	"golang.org/x/net/http2"
 )

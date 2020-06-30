@@ -36,7 +36,7 @@ import (
 	"syscall"
 	"time"
 
-	"gitlab.com/yawning/obfs4.git/common/log"
+	"github.com/RACECAR-GU/obfsX.git/common/log"
 )
 
 var termMonitorOSInit func(*termMonitor) error

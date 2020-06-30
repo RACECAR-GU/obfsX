@@ -42,10 +42,10 @@ import (
 	"syscall"
 
 	"git.torproject.org/pluggable-transports/goptlib.git"
-	"gitlab.com/yawning/obfs4.git/common/log"
-	"gitlab.com/yawning/obfs4.git/common/socks5"
-	"gitlab.com/yawning/obfs4.git/transports"
-	"gitlab.com/yawning/obfs4.git/transports/base"
+	"github.com/RACECAR-GU/obfsX.git/common/log"
+	"github.com/RACECAR-GU/obfsX.git/common/socks5"
+	"github.com/RACECAR-GU/obfsX.git/transports"
+	"github.com/RACECAR-GU/obfsX.git/transports/base"
 	"golang.org/x/net/proxy"
 )
 

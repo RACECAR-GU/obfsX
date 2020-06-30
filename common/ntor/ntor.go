@@ -32,7 +32,7 @@
 //
 // Before using this package, it is strongly recommended that the specification
 // is read and understood.
-package ntor // import "gitlab.com/yawning/obfs4.git/common/ntor"
+package ntor // import "github.com/RACECAR-GU/obfsX.git/common/ntor"
 
 import (
 	"bytes"
@@ -46,8 +46,8 @@ import (
 	"golang.org/x/crypto/curve25519"
 	"golang.org/x/crypto/hkdf"
 
-	"gitlab.com/yawning/obfs4.git/common/csrand"
-	"gitlab.com/yawning/obfs4.git/internal/extra25519"
+	"github.com/RACECAR-GU/obfsX.git/common/csrand"
+	"github.com/RACECAR-GU/obfsX.git/internal/extra25519"
 )
 
 const (

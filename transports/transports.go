@@ -27,19 +27,19 @@
 
 // Package transports provides a interface to query supported pluggable
 // transports.
-package transports // import "gitlab.com/yawning/obfs4.git/transports"
+package transports // import "github.com/RACECAR-GU/obfsX.git/transports"
 
 import (
 	"fmt"
 	"sync"
 
-	"gitlab.com/yawning/obfs4.git/transports/base"
-	"gitlab.com/yawning/obfs4.git/transports/meeklite"
-	"gitlab.com/yawning/obfs4.git/transports/obfs2"
-	"gitlab.com/yawning/obfs4.git/transports/obfs3"
-	"gitlab.com/yawning/obfs4.git/transports/obfs4"
-	"gitlab.com/yawning/obfs4.git/transports/obfs5"
-	"gitlab.com/yawning/obfs4.git/transports/scramblesuit"
+	"github.com/RACECAR-GU/obfsX.git/transports/base"
+	"github.com/RACECAR-GU/obfsX.git/transports/meeklite"
+	"github.com/RACECAR-GU/obfsX.git/transports/obfs2"
+	"github.com/RACECAR-GU/obfsX.git/transports/obfs3"
+	"github.com/RACECAR-GU/obfsX.git/transports/obfs4"
+	"github.com/RACECAR-GU/obfsX.git/transports/obfs5"
+	"github.com/RACECAR-GU/obfsX.git/transports/scramblesuit"
 )
 
 var transportMapLock sync.Mutex

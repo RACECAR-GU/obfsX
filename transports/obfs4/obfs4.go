@@ -27,7 +27,7 @@
 
 // Package obfs4 provides an implementation of the Tor Project's obfs4
 // obfuscation protocol.
-package obfs4 // import "gitlab.com/yawning/obfs4.git/transports/obfs4"
+package obfs4 // import "github.com/RACECAR-GU/obfsX.git/transports/obfs4"
 
 import (
 	"bytes"
@@ -43,14 +43,14 @@ import (
 	"time"
 
 	"git.torproject.org/pluggable-transports/goptlib.git"
-	"gitlab.com/yawning/obfs4.git/common/drbg"
-	"gitlab.com/yawning/obfs4.git/common/log"
-	"gitlab.com/yawning/obfs4.git/common/ntor"
-	"gitlab.com/yawning/obfs4.git/common/probdist"
-	"gitlab.com/yawning/obfs4.git/common/replayfilter"
-	"gitlab.com/yawning/obfs4.git/transports/base"
-	"gitlab.com/yawning/obfs4.git/transports/obfs4/framing"
-	f "gitlab.com/yawning/obfs4.git/common/framing"
+	"github.com/RACECAR-GU/obfsX.git/common/drbg"
+	"github.com/RACECAR-GU/obfsX.git/common/log"
+	"github.com/RACECAR-GU/obfsX.git/common/ntor"
+	"github.com/RACECAR-GU/obfsX.git/common/probdist"
+	"github.com/RACECAR-GU/obfsX.git/common/replayfilter"
+	"github.com/RACECAR-GU/obfsX.git/transports/base"
+	"github.com/RACECAR-GU/obfsX.git/transports/obfs4/framing"
+	f "github.com/RACECAR-GU/obfsX.git/common/framing"
 )
 
 const (

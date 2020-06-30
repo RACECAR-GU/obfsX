@@ -1,4 +1,4 @@
-module gitlab.com/yawning/obfs4.git
+module github.com/RACECAR-GU/obfsX.git
 
 require (
 	git.torproject.org/pluggable-transports/goptlib.git v1.0.0

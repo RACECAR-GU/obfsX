@@ -5,8 +5,8 @@ import (
 	"net"
 	"time"
 
-	"gitlab.com/yawning/obfs4.git/common/drbg"
-	"gitlab.com/yawning/obfs4.git/common/log"
+	"github.com/RACECAR-GU/obfsX.git/common/drbg"
+	"github.com/RACECAR-GU/obfsX.git/common/log"
 	erand "golang.org/x/exp/rand"
 	"gonum.org/v1/gonum/stat/distuv"
 )

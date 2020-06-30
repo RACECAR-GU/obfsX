@@ -8,10 +8,10 @@ import (
   "crypto/cipher"
   "math/rand"
   "encoding/binary"
-  "gitlab.com/yawning/obfs4.git/common/drbg"
-  "gitlab.com/yawning/obfs4.git/common/log"
-  "gitlab.com/yawning/obfs4.git/common/ctstretch"
-  f "gitlab.com/yawning/obfs4.git/common/framing"
+  "github.com/RACECAR-GU/obfsX.git/common/drbg"
+  "github.com/RACECAR-GU/obfsX.git/common/log"
+  "github.com/RACECAR-GU/obfsX.git/common/ctstretch"
+  f "github.com/RACECAR-GU/obfsX.git/common/framing"
 )
 
 const (

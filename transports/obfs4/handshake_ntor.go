@@ -38,10 +38,10 @@ import (
 	"strconv"
 	"time"
 
-	"gitlab.com/yawning/obfs4.git/common/csrand"
-	"gitlab.com/yawning/obfs4.git/common/ntor"
-	"gitlab.com/yawning/obfs4.git/common/replayfilter"
-	"gitlab.com/yawning/obfs4.git/transports/obfs4/framing"
+	"github.com/RACECAR-GU/obfsX.git/common/csrand"
+	"github.com/RACECAR-GU/obfsX.git/common/ntor"
+	"github.com/RACECAR-GU/obfsX.git/common/replayfilter"
+	"github.com/RACECAR-GU/obfsX.git/transports/obfs4/framing"
 )
 
 const (

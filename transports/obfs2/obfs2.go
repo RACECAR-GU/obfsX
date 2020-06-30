@@ -28,7 +28,7 @@
 // Package obfs2 provides an implementation of the Tor Project's obfs2
 // obfuscation protocol.  This protocol is considered trivially broken by most
 // sophisticated adversaries.
-package obfs2 // import "gitlab.com/yawning/obfs4.git/transports/obfs2"
+package obfs2 // import "github.com/RACECAR-GU/obfsX.git/transports/obfs2"
 
 import (
 	"crypto/aes"
@@ -41,8 +41,8 @@ import (
 	"time"
 
 	"git.torproject.org/pluggable-transports/goptlib.git"
-	"gitlab.com/yawning/obfs4.git/common/csrand"
-	"gitlab.com/yawning/obfs4.git/transports/base"
+	"github.com/RACECAR-GU/obfsX.git/common/csrand"
+	"github.com/RACECAR-GU/obfsX.git/transports/base"
 )
 
 const (

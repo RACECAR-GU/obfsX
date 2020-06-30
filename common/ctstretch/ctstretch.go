@@ -7,7 +7,7 @@ import (
 	"math"
 	"unsafe"
 
-	"gitlab.com/yawning/obfs4.git/common/log"
+	"github.com/RACECAR-GU/obfsX.git/common/log"
 )
 
 // Swaps bits i and j in data.  Bit 0 is the first bit of data[0].
