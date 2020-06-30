@@ -36,8 +36,8 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/RACECAR-GU/obfsX.git/common/csrand"
-	"github.com/RACECAR-GU/obfsX.git/common/uniformdh"
+	"github.com/RACECAR-GU/obfsX/common/csrand"
+	"github.com/RACECAR-GU/obfsX/common/uniformdh"
 )
 
 const (

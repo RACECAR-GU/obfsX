@@ -1,4 +1,4 @@
-module github.com/RACECAR-GU/obfsX.git
+module github.com/RACECAR-GU/obfsX
 
 require (
 	git.torproject.org/pluggable-transports/goptlib.git v1.0.0

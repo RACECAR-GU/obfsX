@@ -30,7 +30,7 @@
 // has been seen before based on the SipHash-2-4 digest of the sequence.
 // Collisions are treated as positive matches, though the probability of this
 // happening is negligible.
-package replayfilter // import "github.com/RACECAR-GU/obfsX.git/common/replayfilter"
+package replayfilter // import "github.com/RACECAR-GU/obfsX/common/replayfilter"
 
 import (
 	"container/list"
@@ -39,7 +39,7 @@ import (
 	"time"
 
 	"github.com/dchest/siphash"
-	"github.com/RACECAR-GU/obfsX.git/common/csrand"
+	"github.com/RACECAR-GU/obfsX/common/csrand"
 )
 
 // maxFilterSize is the maximum capacity of a replay filter.  This value is

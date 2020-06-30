@@ -28,7 +28,7 @@
 // Package probdist implements a weighted probability distribution suitable for
 // protocol parameterization.  To allow for easy reproduction of a given
 // distribution, the drbg package is used as the random number source.
-package probdist // import "github.com/RACECAR-GU/obfsX.git/common/probdist"
+package probdist // import "github.com/RACECAR-GU/obfsX/common/probdist"
 
 import (
 	"bytes"
@@ -37,8 +37,8 @@ import (
 	"math/rand"
 	"sync"
 
-	"github.com/RACECAR-GU/obfsX.git/common/csrand"
-	"github.com/RACECAR-GU/obfsX.git/common/drbg"
+	"github.com/RACECAR-GU/obfsX/common/csrand"
+	"github.com/RACECAR-GU/obfsX/common/drbg"
 )
 
 const (

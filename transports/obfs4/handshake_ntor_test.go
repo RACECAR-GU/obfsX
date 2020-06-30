@@ -31,8 +31,8 @@ import (
 	"bytes"
 	"testing"
 
-	"github.com/RACECAR-GU/obfsX.git/common/ntor"
-	"github.com/RACECAR-GU/obfsX.git/common/replayfilter"
+	"github.com/RACECAR-GU/obfsX/common/ntor"
+	"github.com/RACECAR-GU/obfsX/common/replayfilter"
 )
 
 func TestHandshakeNtorClient(t *testing.T) {

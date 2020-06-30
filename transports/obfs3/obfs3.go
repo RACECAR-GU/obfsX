@@ -27,7 +27,7 @@
 
 // Package obfs3 provides an implementation of the Tor Project's obfs3
 // obfuscation protocol.
-package obfs3 // import "github.com/RACECAR-GU/obfsX.git/transports/obfs3"
+package obfs3 // import "github.com/RACECAR-GU/obfsX/transports/obfs3"
 
 import (
 	"bytes"
@@ -41,9 +41,9 @@ import (
 	"time"
 
 	"git.torproject.org/pluggable-transports/goptlib.git"
-	"github.com/RACECAR-GU/obfsX.git/common/csrand"
-	"github.com/RACECAR-GU/obfsX.git/common/uniformdh"
-	"github.com/RACECAR-GU/obfsX.git/transports/base"
+	"github.com/RACECAR-GU/obfsX/common/csrand"
+	"github.com/RACECAR-GU/obfsX/common/uniformdh"
+	"github.com/RACECAR-GU/obfsX/transports/base"
 )
 
 const (

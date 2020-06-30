@@ -31,7 +31,7 @@
 // Not all of the convinience routines are replicated, only those that are
 // immediately useful.  The Rand variable provides access to the full math/rand
 // API.
-package csrand // import "github.com/RACECAR-GU/obfsX.git/common/csrand"
+package csrand // import "github.com/RACECAR-GU/obfsX/common/csrand"
 
 import (
 	cryptRand "crypto/rand"

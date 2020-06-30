@@ -46,7 +46,7 @@ import (
 	"time"
 
 	"git.torproject.org/pluggable-transports/goptlib.git"
-	"github.com/RACECAR-GU/obfsX.git/transports/base"
+	"github.com/RACECAR-GU/obfsX/transports/base"
 	utls "gitlab.com/yawning/utls.git"
 )
 

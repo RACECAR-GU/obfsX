@@ -37,7 +37,7 @@ echo "host github.com
  IdentityFile ~/.ssh/racecar_bot
  User git" | tee ~/.ssh/config
 
-git clone git@github.com:RACECAR-GU/obfsX.git ~/obfsx
+git clone git@github.com:RACECAR-GU/obfsX ~/obfsx
 
 cd ~/obfsx
 

@@ -42,7 +42,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/RACECAR-GU/obfsX.git/common/csrand"
+	"github.com/RACECAR-GU/obfsX/common/csrand"
 )
 
 const (

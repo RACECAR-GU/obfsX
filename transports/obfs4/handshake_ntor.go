@@ -38,10 +38,10 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/RACECAR-GU/obfsX.git/common/csrand"
-	"github.com/RACECAR-GU/obfsX.git/common/ntor"
-	"github.com/RACECAR-GU/obfsX.git/common/replayfilter"
-	"github.com/RACECAR-GU/obfsX.git/transports/obfs4/framing"
+	"github.com/RACECAR-GU/obfsX/common/csrand"
+	"github.com/RACECAR-GU/obfsX/common/ntor"
+	"github.com/RACECAR-GU/obfsX/common/replayfilter"
+	"github.com/RACECAR-GU/obfsX/transports/obfs4/framing"
 )
 
 const (

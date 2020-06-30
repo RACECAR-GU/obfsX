@@ -9,9 +9,9 @@ import (
   "net"
   "encoding/binary"
 
-  "github.com/RACECAR-GU/obfsX.git/common/drbg"
-  "github.com/RACECAR-GU/obfsX.git/common/csrand"
-  "github.com/RACECAR-GU/obfsX.git/common/log"
+  "github.com/RACECAR-GU/obfsX/common/drbg"
+  "github.com/RACECAR-GU/obfsX/common/csrand"
+  "github.com/RACECAR-GU/obfsX/common/log"
 )
 
 const (

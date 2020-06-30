@@ -31,8 +31,8 @@ import (
 	"encoding/binary"
 	"fmt"
 
-	"github.com/RACECAR-GU/obfsX.git/transports/obfs4/framing"
-	f "github.com/RACECAR-GU/obfsX.git/common/framing"
+	"github.com/RACECAR-GU/obfsX/transports/obfs4/framing"
+	f "github.com/RACECAR-GU/obfsX/common/framing"
 )
 
 const (

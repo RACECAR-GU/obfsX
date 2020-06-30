@@ -58,7 +58,7 @@
 // and the initial counter value.  It is imperative that the counter does not
 // wrap, and sessions MUST terminate before 2^64 frames are sent.
 //
-package framing // import "github.com/RACECAR-GU/obfsX.git/transports/obfs4/framing"
+package framing // import "github.com/RACECAR-GU/obfsX/transports/obfs4/framing"
 
 import (
 	"bytes"
@@ -66,8 +66,8 @@ import (
 	"errors"
 	"fmt"
 
-	"github.com/RACECAR-GU/obfsX.git/common/drbg"
-	f "github.com/RACECAR-GU/obfsX.git/common/framing"
+	"github.com/RACECAR-GU/obfsX/common/drbg"
+	f "github.com/RACECAR-GU/obfsX/common/framing"
 	"golang.org/x/crypto/nacl/secretbox"
 )
 

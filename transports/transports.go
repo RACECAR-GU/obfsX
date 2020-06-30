@@ -27,19 +27,19 @@
 
 // Package transports provides a interface to query supported pluggable
 // transports.
-package transports // import "github.com/RACECAR-GU/obfsX.git/transports"
+package transports // import "github.com/RACECAR-GU/obfsX/transports"
 
 import (
 	"fmt"
 	"sync"
 
-	"github.com/RACECAR-GU/obfsX.git/transports/base"
-	"github.com/RACECAR-GU/obfsX.git/transports/meeklite"
-	"github.com/RACECAR-GU/obfsX.git/transports/obfs2"
-	"github.com/RACECAR-GU/obfsX.git/transports/obfs3"
-	"github.com/RACECAR-GU/obfsX.git/transports/obfs4"
-	"github.com/RACECAR-GU/obfsX.git/transports/obfs5"
-	"github.com/RACECAR-GU/obfsX.git/transports/scramblesuit"
+	"github.com/RACECAR-GU/obfsX/transports/base"
+	"github.com/RACECAR-GU/obfsX/transports/meeklite"
+	"github.com/RACECAR-GU/obfsX/transports/obfs2"
+	"github.com/RACECAR-GU/obfsX/transports/obfs3"
+	"github.com/RACECAR-GU/obfsX/transports/obfs4"
+	"github.com/RACECAR-GU/obfsX/transports/obfs5"
+	"github.com/RACECAR-GU/obfsX/transports/scramblesuit"
 )
 
 var transportMapLock sync.Mutex

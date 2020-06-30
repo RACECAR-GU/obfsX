@@ -27,7 +27,7 @@
 
 // Package obfs5 provides an implementation of the Tor Project's obfs5
 // obfuscation protocol.
-package obfs5 // import "github.com/RACECAR-GU/obfsX.git/transports/obfs5"
+package obfs5 // import "github.com/RACECAR-GU/obfsX/transports/obfs5"
 
 import (
 	"flag"
@@ -35,11 +35,11 @@ import (
 	"net"
 
 	"git.torproject.org/pluggable-transports/goptlib.git"
-	"github.com/RACECAR-GU/obfsX.git/common/drbg"
-	"github.com/RACECAR-GU/obfsX.git/transports/base"
-	"github.com/RACECAR-GU/obfsX.git/transports/obfs4"
-	"github.com/RACECAR-GU/obfsX.git/transports/sharknado"
-	"github.com/RACECAR-GU/obfsX.git/transports/riverrun"
+	"github.com/RACECAR-GU/obfsX/common/drbg"
+	"github.com/RACECAR-GU/obfsX/transports/base"
+	"github.com/RACECAR-GU/obfsX/transports/obfs4"
+	"github.com/RACECAR-GU/obfsX/transports/sharknado"
+	"github.com/RACECAR-GU/obfsX/transports/riverrun"
 )
 
 const (

@@ -31,7 +31,7 @@ import (
 	"fmt"
 	"testing"
 
-	"github.com/RACECAR-GU/obfsX.git/common/drbg"
+	"github.com/RACECAR-GU/obfsX/common/drbg"
 )
 
 const debug = false

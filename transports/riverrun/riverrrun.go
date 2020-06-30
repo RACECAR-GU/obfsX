@@ -8,10 +8,10 @@ import (
   "crypto/cipher"
   "math/rand"
   "encoding/binary"
-  "github.com/RACECAR-GU/obfsX.git/common/drbg"
-  "github.com/RACECAR-GU/obfsX.git/common/log"
-  "github.com/RACECAR-GU/obfsX.git/common/ctstretch"
-  f "github.com/RACECAR-GU/obfsX.git/common/framing"
+  "github.com/RACECAR-GU/obfsX/common/drbg"
+  "github.com/RACECAR-GU/obfsX/common/log"
+  "github.com/RACECAR-GU/obfsX/common/ctstretch"
+  f "github.com/RACECAR-GU/obfsX/common/framing"
 )
 
 const (

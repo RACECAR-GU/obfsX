@@ -27,7 +27,7 @@
 
 // Package base provides the common interface that each supported transport
 // protocol must implement.
-package base // import "github.com/RACECAR-GU/obfsX.git/transports/base"
+package base // import "github.com/RACECAR-GU/obfsX/transports/base"
 
 import (
 	"net"

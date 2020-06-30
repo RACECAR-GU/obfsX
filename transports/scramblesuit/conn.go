@@ -43,10 +43,10 @@ import (
 	"time"
 
 	"git.torproject.org/pluggable-transports/goptlib.git"
-	"github.com/RACECAR-GU/obfsX.git/common/csrand"
-	"github.com/RACECAR-GU/obfsX.git/common/drbg"
-	"github.com/RACECAR-GU/obfsX.git/common/probdist"
-	"github.com/RACECAR-GU/obfsX.git/common/uniformdh"
+	"github.com/RACECAR-GU/obfsX/common/csrand"
+	"github.com/RACECAR-GU/obfsX/common/drbg"
+	"github.com/RACECAR-GU/obfsX/common/probdist"
+	"github.com/RACECAR-GU/obfsX/common/uniformdh"
 )
 
 const (

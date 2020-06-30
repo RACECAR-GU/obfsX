@@ -4,7 +4,7 @@
 
 package extra25519
 
-import "github.com/RACECAR-GU/obfsX.git/internal/edwards25519"
+import "github.com/RACECAR-GU/obfsX/internal/edwards25519"
 
 // sqrtMinusAPlus2 is sqrt(-(486662+2))
 var sqrtMinusAPlus2 = edwards25519.FieldElement{

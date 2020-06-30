@@ -5,8 +5,8 @@ import (
 	"net"
 	"time"
 
-	"github.com/RACECAR-GU/obfsX.git/common/drbg"
-	"github.com/RACECAR-GU/obfsX.git/common/log"
+	"github.com/RACECAR-GU/obfsX/common/drbg"
+	"github.com/RACECAR-GU/obfsX/common/log"
 	erand "golang.org/x/exp/rand"
 	"gonum.org/v1/gonum/stat/distuv"
 )

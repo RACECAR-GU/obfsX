@@ -38,9 +38,9 @@ import (
 	"strings"
 
 	"git.torproject.org/pluggable-transports/goptlib.git"
-	"github.com/RACECAR-GU/obfsX.git/common/csrand"
-	"github.com/RACECAR-GU/obfsX.git/common/drbg"
-	"github.com/RACECAR-GU/obfsX.git/common/ntor"
+	"github.com/RACECAR-GU/obfsX/common/csrand"
+	"github.com/RACECAR-GU/obfsX/common/drbg"
+	"github.com/RACECAR-GU/obfsX/common/ntor"
 )
 
 const (
