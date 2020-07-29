@@ -19,7 +19,7 @@ const (
 )
 
 // Implements the net.Conn interface
-type RiverrunConn struct {
+type Conn struct {
   // Embeds a net.Conn and inherits its members.
   net.Conn
 
@@ -29,7 +29,7 @@ type RiverrunConn struct {
   Decoder *riverrunDecoder
 }
 
-func NewRiverrunConn(conn net.Conn, isServer bool, seed *drbg.Seed) (*RiverrunConn, error) {
+func NewConn(conn net.Conn, isServer bool, seed *drbg.Seed) (*Conn, error) {
 
   xdrbg, err := drbg.NewHashDrbg(seed)
   if err != nil {
@@ -93,7 +93,7 @@ func NewRiverrunConn(conn net.Conn, isServer bool, seed *drbg.Seed) (*RiverrunCo
     rng.Read(writeKey)
     rng.Read(readKey)
   }
-  rr := new(RiverrunConn)
+  rr := new(Conn)
   rr.Conn = conn
   rr.bias = bias
   // Encoder
@@ -262,7 +262,7 @@ func (decoder *riverrunDecoder) compressBytes(raw, res []byte) error {
   return ctstretch.CompressBytes(raw, res, decoder.expandedBlockBits, decoder.compressedBlockBits, decoder.revTable16, decoder.revTable8, decoder.readStream, rand.Int())
 }
 
-func (rr *RiverrunConn) Write(b []byte) (n int, err error) {
+func (rr *Conn) Write(b []byte) (n int, err error) {
 
   var frameBuf bytes.Buffer
 	frameBuf, n, err = rr.Encoder.Chop(b, PacketTypePayload)
@@ -279,7 +279,7 @@ func (rr *RiverrunConn) Write(b []byte) (n int, err error) {
   return
 }
 
-func (rr *RiverrunConn) Read(b []byte) (int, error) {
+func (rr *Conn) Read(b []byte) (int, error) {
   //originalLen := len(b)
   n, err := rr.Decoder.Read(b, rr.Conn)
   //log.Debugf("Riverrun: %d compressed to %d <-", originalLen, n)

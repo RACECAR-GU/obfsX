@@ -35,8 +35,8 @@ const (
 // sharknado.
 type DummyTrafficFunc func(int) ([]byte, error)
 
-// SharknadoConn implements the net.Conn interface.
-type SharknadoConn struct {
+// Conn implements the net.Conn interface.
+type Conn struct {
 	// Embed a net.Conn and inherit its members.
 	net.Conn
 	GetDummyTraffic DummyTrafficFunc
@@ -48,8 +48,8 @@ type SharknadoConn struct {
 	bytesRcvd  int
 }
 
-// NewSharknadoConn creates a new Sharknado connection.
-func NewSharknadoConn(conn net.Conn, getDummyTraffic DummyTrafficFunc, seed *drbg.Seed) *SharknadoConn {
+// NewConn creates a new Sharknado connection.
+func NewConn(conn net.Conn, getDummyTraffic DummyTrafficFunc, seed *drbg.Seed) *Conn {
 
 	// Initialize the deterministic random number generator.
 	log.Debugf("Using sharknado seed %x.", *seed)
@@ -61,7 +61,7 @@ func NewSharknadoConn(conn net.Conn, getDummyTraffic DummyTrafficFunc, seed *drb
 	breakAfterDist := &distuv.Poisson{float64(minBreakAfterBytes + rng.Intn(randBreakAfterBytes)), erand.NewSource(4)}
 	numDummyDist := &distuv.Poisson{float64(minNumDummyBytes + rng.Intn(randNumDummyBytes)), erand.NewSource(4)}
 
-	sc := &SharknadoConn{conn, getDummyTraffic, breakAfterDist, numDummyDist, int(breakAfterDist.Rand()), 0}
+	sc := &Conn{conn, getDummyTraffic, breakAfterDist, numDummyDist, int(breakAfterDist.Rand()), 0}
 
 	// Decide if we should start a heartbeat.
 	if rng.Intn(heartbeatDenominator) == 0 {
@@ -79,7 +79,7 @@ func NewSharknadoConn(conn net.Conn, getDummyTraffic DummyTrafficFunc, seed *drb
 
 // resetState resets our two state variables; `breakAfter` by assigning it a
 // new random value, and `bytesRcvd` by resetting it to 0.
-func (sn *SharknadoConn) resetState() {
+func (sn *Conn) resetState() {
 
 	sn.breakAfter = int(sn.breakAfterDist.Rand())
 	sn.bytesRcvd = 0
@@ -88,14 +88,14 @@ func (sn *SharknadoConn) resetState() {
 
 // shouldBreakBurst returns `true` if we should break the current burst of
 // incoming packets and `false` otherwise.
-func (sn *SharknadoConn) shouldBreakBurst() bool {
+func (sn *Conn) shouldBreakBurst() bool {
 
 	return sn.bytesRcvd > sn.breakAfter
 }
 
 // sendDummyTraffic sends dummy traffic and returns the result of the Write()
 // call.
-func (sn *SharknadoConn) sendDummyTraffic() (int, error) {
+func (sn *Conn) sendDummyTraffic() (int, error) {
 
 	numBytes := int(sn.numDummyDist.Rand())
 	log.Debugf("Breaking burst with %d bytes of dummy traffic.", numBytes)
@@ -107,7 +107,7 @@ func (sn *SharknadoConn) sendDummyTraffic() (int, error) {
 }
 
 // heartbeat implements a heartbeat mechanism that sends dummy traffic every
-func (sn *SharknadoConn) heartbeat(interval int) {
+func (sn *Conn) heartbeat(interval int) {
 
 	duration := time.Second * time.Duration(interval)
 	numBytes := int(sn.numDummyDist.Rand())
@@ -131,14 +131,14 @@ func (sn *SharknadoConn) heartbeat(interval int) {
 	}
 }
 
-func (sn *SharknadoConn) Write(b []byte) (int, error) {
+func (sn *Conn) Write(b []byte) (int, error) {
 
 	n, err := sn.Conn.Write(b)
 	// log.Debugf("Sharknado: %d ->", n)
 	return n, err
 }
 
-func (sn *SharknadoConn) Read(b []byte) (int, error) {
+func (sn *Conn) Read(b []byte) (int, error) {
 
 	n, err := sn.Conn.Read(b)
 	sn.bytesRcvd += n

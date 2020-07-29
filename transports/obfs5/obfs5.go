@@ -123,7 +123,7 @@ func (sf *ServerFactory) WrapConn(conn net.Conn) (net.Conn, error) {
 	if err != nil {
 		return nil, err
 	}
-	inner, err := riverrun.NewRiverrunConn(conn, true, serverSeed)
+	inner, err := riverrun.NewConn(conn, true, serverSeed)
 	if err != nil {
 		return nil, err
 	}
@@ -145,7 +145,7 @@ func NewClientConn(conn net.Conn, args *ClientArgs) (c *Conn, err error) {
 	}
 
 	// Allocate the client structure.
-	rr, err := riverrun.NewRiverrunConn(conn, false, serverSeed)
+	rr, err := riverrun.NewConn(conn, false, serverSeed)
 	if err != nil {
 		return nil, err
 	}
@@ -153,7 +153,7 @@ func NewClientConn(conn net.Conn, args *ClientArgs) (c *Conn, err error) {
 	if err != nil {
 		return nil, err
 	}
-	outer.Conn = sharknado.NewSharknadoConn(rr, outer.GetDummyTraffic, serverSeed)
+	outer.Conn = sharknado.NewConn(rr, outer.GetDummyTraffic, serverSeed)
 
 	c = new(Conn)
 	c.Conn = outer
