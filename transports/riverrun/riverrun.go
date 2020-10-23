@@ -71,14 +71,17 @@ func NewConn(conn net.Conn, isServer bool, seed *drbg.Seed) (*Conn, error) {
   if err != nil {
 		return nil, err
 	}
+  log.Debugf("riverrun: table8 prepped")
   table16, err := ctstretch.SampleBiasedStrings(expandedBlockBits, 65536, bias, stream)
   if err != nil {
 		return nil, err
 	}
+  log.Debugf("riverrun: table16 prepped")
 
   var readStream, writeStream cipher.Stream
   readKey := make([]byte, drbg.SeedLength)
   writeKey := make([]byte, drbg.SeedLength)
+  log.Debugf("riverrun: r/w keys made")
   // XXX: The only distinction between the read and write streams is the iv... is this secure?
   if isServer {
     readStream = stream
@@ -93,11 +96,13 @@ func NewConn(conn net.Conn, isServer bool, seed *drbg.Seed) (*Conn, error) {
     rng.Read(writeKey)
     rng.Read(readKey)
   }
+  log.Debugf("riverrun: Loaded keys properly")
   rr := new(Conn)
   rr.Conn = conn
   rr.bias = bias
   // Encoder
   rr.Encoder = newRiverrunEncoder(writeKey, writeStream, table8, table16, compressedBlockBits, expandedBlockBits)
+  log.Debugf("riverrun: Encoder initialized")
   // Decoder
   rr.Decoder = newRiverrunDecoder(readKey, readStream, ctstretch.InvertTable(table8), ctstretch.InvertTable(table16), compressedBlockBits, expandedBlockBits)
   log.Debugf("riverrun: Initialized")
