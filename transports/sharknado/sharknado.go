@@ -103,7 +103,8 @@ func (sn *Conn) sendDummyTraffic() (int, error) {
 	if err != nil {
 		return 0, err
 	}
-	return sn.Conn.Write(data)
+
+	return sn.Write(data)
 }
 
 // heartbeat implements a heartbeat mechanism that sends dummy traffic every
@@ -122,7 +123,7 @@ func (sn *Conn) heartbeat(interval int) {
 				continue
 			}
 			log.Debugf("Sending %d bytes of heartbeat data.", len(data))
-			_, err = sn.Conn.Write(data)
+			_, err = sn.Write(data)
 			if err != nil {
 				log.Debugf("Error while writing. Stopping heartbeat.")
 				return

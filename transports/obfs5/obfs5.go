@@ -38,7 +38,7 @@ import (
 	"github.com/RACECAR-GU/obfsX/common/drbg"
 	"github.com/RACECAR-GU/obfsX/transports/base"
 	"github.com/RACECAR-GU/obfsX/transports/obfs4"
-	"github.com/RACECAR-GU/obfsX/transports/sharknado"
+	// "github.com/RACECAR-GU/obfsX/transports/sharknado"
 	"github.com/RACECAR-GU/obfsX/transports/riverrun"
 )
 
@@ -155,7 +155,7 @@ func NewClientConn(conn net.Conn, args *ClientArgs) (c *Conn, err error) {
 	if err != nil {
 		return nil, err
 	}
-	outer.Conn = sharknado.NewConn(rr, outer.GetDummyTraffic, serverSeed)
+	// outer.Conn = sharknado.NewConn(rr, outer.GetDummyTraffic, serverSeed)
 
 	c = new(Conn)
 	c.Conn = outer
