@@ -92,6 +92,7 @@ type ClientFactory struct {
 func (cf *ClientFactory) Dial(network, addr string, dialFn base.DialFunc, args interface{}) (net.Conn, error) {
 	// Validate args before bothering to open connection.
 	ca := new(ClientArgs)
+	// XXX: Just realized I messed up here - should parse to obfs5 right away
 	subca, ok := args.(*obfs4.ClientArgs)
 	if !ok {
 		return nil, fmt.Errorf("invalid argument type for args")
