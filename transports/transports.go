@@ -34,8 +34,6 @@ import (
 	"sync"
 
 	"github.com/RACECAR-GU/obfsX/transports/base"
-	"github.com/RACECAR-GU/obfsX/transports/meeklite"
-	"github.com/RACECAR-GU/obfsX/transports/obfs2"
 	"github.com/RACECAR-GU/obfsX/transports/obfs3"
 	"github.com/RACECAR-GU/obfsX/transports/obfs4"
 	"github.com/RACECAR-GU/obfsX/transports/obfs5"
@@ -86,8 +84,6 @@ func Get(name string) base.Transport {
 // Init initializes all of the integrated transports.
 func Init() error {
 	for _, v := range []base.Transport{
-		new(meeklite.Transport),
-		new(obfs2.Transport),
 		new(obfs3.Transport),
 		new(obfs4.Transport),
 		new(obfs5.Transport),

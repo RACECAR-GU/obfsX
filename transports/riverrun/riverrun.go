@@ -63,7 +63,7 @@ func NewConn(conn net.Conn, isServer bool, seed *drbg.Seed) (*Conn, error) {
 		expandedBlockBits8 = compressedBlockBits / 2
 	}
 
-	bias := rng.Float64() * .7 + .15
+	bias := rng.Float64() * .2 + .1 // Targeting entropy of 4-7 based on observations
 
 	log.Infof("rr: Set bias to %f, compressed block bits to %d, expanded block bits to %d", bias, expandedBlockBits, compressedBlockBits)
 
