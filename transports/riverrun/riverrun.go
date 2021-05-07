@@ -36,18 +36,13 @@ func NewConn(conn net.Conn, isServer bool, seed *drbg.Seed) (*Conn, error) {
 		return nil, err
 	}
 	rng := rand.New(xdrbg)
+
 	key := make([]byte, 16)
 	rng.Read(key)
-
 	block, err := aes.NewCipher(key)
 	if err != nil {
 		return nil, err
 	}
-
-	iv := make([]byte, block.BlockSize())
-	rng.Read(iv)
-
-	stream := cipher.NewCTR(block, iv)
 
 	// FIXME: Input and output block bits are randomly selected from valid options,
 	//        there may be a more optimal selection methedology/initial subset
@@ -67,22 +62,17 @@ func NewConn(conn net.Conn, isServer bool, seed *drbg.Seed) (*Conn, error) {
 
 	log.Infof("rr: Set bias to %f, compressed block bits to %d, expanded block bits to %d", bias, expandedBlockBits, compressedBlockBits)
 
-	table8, err := ctstretch.SampleBiasedStrings(expandedBlockBits8, 256, bias, stream)
-	if err != nil {
-		return nil, err
-	}
-	log.Debugf("riverrun: table8 prepped")
-	table16, err := ctstretch.SampleBiasedStrings(expandedBlockBits, 65536, bias, stream)
-	if err != nil {
-		return nil, err
-	}
-	log.Debugf("riverrun: table16 prepped")
+	iv := make([]byte, block.BlockSize())
+	rng.Read(iv)
+	table8, table16, err := getTables(expandedBlockBits8, expandedBlockBits, bias, key, block, iv)
 
 	var readStream, writeStream cipher.Stream
+	rng.Read(iv)
+	stream := cipher.NewCTR(block, iv)
 	readKey := make([]byte, drbg.SeedLength)
 	writeKey := make([]byte, drbg.SeedLength)
 	log.Debugf("riverrun: r/w keys made")
-	// XXX: The only distinction between the read and write streams is the iv... is this secure?
+
 	if isServer {
 		readStream = stream
 		rng.Read(iv)
@@ -107,6 +97,47 @@ func NewConn(conn net.Conn, isServer bool, seed *drbg.Seed) (*Conn, error) {
 	rr.Decoder = newRiverrunDecoder(readKey, readStream, ctstretch.InvertTable(table8), ctstretch.InvertTable(table16), compressedBlockBits, expandedBlockBits)
 	log.Debugf("riverrun: Initialized")
 	return rr, nil
+}
+
+var cache8	map[string][]uint64
+var cache16	map[string][]uint64
+
+func getTables(expandedBlockBits8 uint64, expandedBlockBits uint64, bias float64, key []byte, block cipher.Block, iv []byte) ([]uint64, []uint64, error) {
+
+	if cache8 == nil {
+		cache8 = make(map[string][]uint64)
+	}
+	if cache16 == nil {
+		cache16 = make(map[string][]uint64)
+	}
+
+	table8, ok := cache8[string(key)]
+	if ok {
+		table16, ok := cache16[string(key)]
+		if ok {
+			log.Debugf("riverrun: using cached tables")
+			return table8, table16, nil
+		}
+	}
+
+	log.Debugf("riverrun: Generating fresh tables")
+	stream := cipher.NewCTR(block, iv)
+
+	table8, err := ctstretch.SampleBiasedStrings(expandedBlockBits8, 256, bias, stream)
+	if err != nil {
+		return nil, nil, err
+	}
+	log.Debugf("riverrun: table8 prepped")
+	table16, err := ctstretch.SampleBiasedStrings(expandedBlockBits, 65536, bias, stream)
+	if err != nil {
+		return nil, nil, err
+	}
+	log.Debugf("riverrun: table16 prepped")
+
+	cache8[string(key)] = table8
+	cache16[string(key)] = table16
+
+	return table8, table16, nil
 }
 
 type riverrunEncoder struct {
