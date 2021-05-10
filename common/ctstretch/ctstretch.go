@@ -108,7 +108,7 @@ func SampleBiasedString(numBits uint64, bias float64, stream cipher.Stream) (uin
 		// Simulate a biased coin flip
 		sample, err := UniformSample(0, math.MaxUint64-1, stream)
 		if err != nil {
-			return r, nil
+			return r, err
 		}
 		x := float64(sample) / float64(math.MaxUint64-1)
 		b := uint64(0)
@@ -134,7 +134,7 @@ func SampleBiasedStrings(numBits, n uint64, bias float64, stream cipher.Stream) 
 		for haveKey == true {
 			s, err = SampleBiasedString(numBits, bias, stream)
 			if err != nil {
-				return vals, err
+				return nil, err
 			}
 			_, haveKey = m[s]
 		}
