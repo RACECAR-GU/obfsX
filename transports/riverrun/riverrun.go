@@ -51,7 +51,7 @@ func NewConn(conn net.Conn, isServer bool, seed *drbg.Seed) (*Conn, error) {
 	var expandedBlockBits uint64
 	var expandedBlockBits8 uint64
 	if compressedBlockBits == 8 {
-		expandedBlockBits = uint64((rng.Intn(7)+2) * 8)
+		expandedBlockBits = uint64((rng.Intn(6)+3) * 8)
 		expandedBlockBits8 = compressedBlockBits
 	} else {
 		expandedBlockBits = uint64((rng.Intn(3)+2) * 16)
