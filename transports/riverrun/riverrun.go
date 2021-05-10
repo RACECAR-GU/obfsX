@@ -60,11 +60,14 @@ func NewConn(conn net.Conn, isServer bool, seed *drbg.Seed) (*Conn, error) {
 
 	bias := rng.Float64() * .2 + .1 // Targeting entropy of 4-7 based on observations
 
-	log.Infof("rr: Set bias to %f, compressed block bits to %d, expanded block bits to %d", bias, expandedBlockBits, compressedBlockBits)
+	log.Infof("rr: Set bias to %f, compressed block bits to %d, expanded block bits to %d", bias, compressedBlockBits, expandedBlockBits)
 
 	iv := make([]byte, block.BlockSize())
 	rng.Read(iv)
 	table8, table16, err := getTables(expandedBlockBits8, expandedBlockBits, bias, key, block, iv)
+	if err != nil {
+		return nil, err
+	}
 
 	var readStream, writeStream cipher.Stream
 	rng.Read(iv)
