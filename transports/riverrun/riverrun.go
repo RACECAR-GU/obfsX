@@ -51,11 +51,11 @@ func NewConn(conn net.Conn, isServer bool, seed *drbg.Seed) (*Conn, error) {
 	var expandedBlockBits uint64
 	var expandedBlockBits8 uint64
 	if compressedBlockBits == 8 {
-		expandedBlockBits = uint64((rng.Intn(6)+3) * 8)
-		expandedBlockBits8 = compressedBlockBits
+		expandedBlockBits = uint64((rng.Intn(7)+2) * 8)
+		expandedBlockBits8 = expandedBlockBits
 	} else {
 		expandedBlockBits = uint64((rng.Intn(3)+2) * 16)
-		expandedBlockBits8 = compressedBlockBits / 2
+		expandedBlockBits8 = expandedBlockBits / 2
 	}
 
 	bias := rng.Float64() * .2 + .1 // Targeting entropy of 4-7 based on observations
