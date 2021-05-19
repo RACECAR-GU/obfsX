@@ -1,3 +1,7 @@
+# obfs5 -- [RACECAR's](https://racecar.cs.georgetown.edu) modification's to obfs4
+
+The original README for obfs4 is as follows.
+
 ## obfs4 - The obfourscator
 #### Yawning Angel (yawning at schwanenlied dot me)
 
