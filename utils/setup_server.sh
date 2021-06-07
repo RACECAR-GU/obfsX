@@ -4,6 +4,20 @@
 # This script targets testing servers - I would not use it to spin up servers that are meant to be used in the wild.
 # TODO: Make command line option for OBFS4
 
+if [ "$1" == "" ]; then
+	echo "You must pass an IP as the first parameter"
+	exit 1
+fi
+
+IP=$1
+PORT='6666'
+PTDIR='/pt'
+OBFSDIR="$PTDIR/obfs"
+BRIDGELINE="$OBFSDIR/bridgeline.txt"
+LOG='false'
+LOGLEVEL='DEBUG'
+CONTACT='st1038@georgetown.edu'
+
 apt update
 
 apt install apt-transport-https software-properties-common -y
@@ -18,10 +32,10 @@ add-apt-repository ppa:longsleep/golang-backports -y
 apt update
 apt install tor deb.torproject.org-keyring git golang-go -y
 
-mkdir -p /pt/obfs/
-git clone https://github.com/RACECAR-GU/obfsX.git /pt/obfs
+mkdir -p $OBFSDIR
+git clone https://github.com/RACECAR-GU/obfsX.git $OBFSDIR
 
-cd /pt/obfs
+cd $OBFSDIR
 
 go build -o bin ./obfs4proxy
 
@@ -35,17 +49,17 @@ PublishServerDescriptor 0
 # Avoid port 9001 because it's commonly associated with Tor and censors may be scanning the Internet for this port.
 ORPort 9999
 
-ServerTransportPlugin obfs4,obfs5 exec /pt/obfs/bin -enableLogging=true -logLevel DEBUG
+ServerTransportPlugin obfs4,obfs5 exec $OBFSDIR/bin -enableLogging=$LOG -logLevel $LOGLEVEL
 
 # This port must be externally reachable and must be different from the one specified for ORPort.
 # Avoid port 9001 because it's commonly associated with Tor and censors may be scanning the Internet for this port.
-ServerTransportListenAddr obfs5 0.0.0.0:6666
+ServerTransportListenAddr obfs5 0.0.0.0:$PORT
 
 # Local communication port between Tor and obfs4.  Always set this to \"auto\".
 # \"Ext\" means \"extended\", not \"external\".  Don't try to set a specific port number, nor listen on 0.0.0.0.
 ExtORPort auto
 
-ContactInfo <st1038@georgetown.edu>
+ContactInfo <$CONTACT>
 
 # Pick a nickname that you like for your bridge.  This is optional.
 Nickname OBFS5Test" | sudo tee /etc/tor/torrc
@@ -58,5 +72,11 @@ systemctl restart tor
 # Tor takes time to start, our bridgeline needs to cook...
 sleep 2m
 
-cat /var/log/syslog | grep "Your Tor server's identity key  fingerprint is" -i > /pt/obfs/bridgeline.txt
-tail /var/lib/tor/pt_state/obfs4_bridgeline.txt >> /pt/obfs/bridgeline.txt
+FINGERPRINT=$(cat /var/log/syslog | grep "Your Tor server's identity key  fingerprint is" |\
+	sed -n 1p | cut -d "'" -f3 | cut -d " " -f2)
+tail -n 1 /var/lib/tor/pt_state/obfs4_bridgeline.txt > $BRIDGELINE
+
+sed -i "s/<PORT>/$PORT/g" $BRIDGELINE
+sed -i "s/obfs4/obfs5/g" $BRIDGELINE
+sed -i "s/<FINGERPRINT>/$FINGERPRINT/g" $BRIDGELINE
+sed -i "s/<IP>/$IP/g" $BRIDGELINE
