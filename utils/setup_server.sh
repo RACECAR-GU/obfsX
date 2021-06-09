@@ -4,12 +4,8 @@
 # This script targets testing servers - I would not use it to spin up servers that are meant to be used in the wild.
 # TODO: Make command line option for OBFS4
 
-if [ "$1" == "" ]; then
-	echo "You must pass an IP as the first parameter"
-	exit 1
-fi
+hostname
 
-IP=$1
 PORT='6666'
 PTDIR='/pt'
 OBFSDIR="$PTDIR/obfs"
@@ -79,4 +75,3 @@ tail -n 1 /var/lib/tor/pt_state/obfs4_bridgeline.txt > $BRIDGELINE
 sed -i "s/<PORT>/$PORT/g" $BRIDGELINE
 sed -i "s/obfs4/obfs5/g" $BRIDGELINE
 sed -i "s/<FINGERPRINT>/$FINGERPRINT/g" $BRIDGELINE
-sed -i "s/<IP>/$IP/g" $BRIDGELINE

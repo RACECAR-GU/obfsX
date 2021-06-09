@@ -5,15 +5,15 @@
 
 apt update
 
-apt install apt-transport-https software-properties-common
-echo "deb https://deb.torproject.org/torproject.org bionic main
-deb-src https://deb.torproject.org/torproject.org bionic main" | tee /etc/apt/sources.list.d/tor_sources.list
+apt -y install apt-transport-https software-properties-common
+echo "deb https://deb.torproject.org/torproject.org focal main
+deb-src https://deb.torproject.org/torproject.org focal main" | tee /etc/apt/sources.list.d/tor_sources.list
 
 wget -qO- https://deb.torproject.org/torproject.org/A3C4F0F979CAA22CDBA8F512EE8CBC9E886DDD89.asc | gpg --import
 gpg --export A3C4F0F979CAA22CDBA8F512EE8CBC9E886DDD89 | apt-key add -
 
 apt update
-apt install tor deb.torproject.org-keyring obfs4proxy
+apt -y install tor deb.torproject.org-keyring obfs4proxy
 
 rm /etc/tor/torrc
 
@@ -45,8 +45,16 @@ sudo apparmor_parser -R /etc/apparmor.d/system_tor
 
 systemctl restart tor
 
-sleep 5
+# Tor takes time to start, our bridgeline needs to cook...
+sleep 2m
 
-cat /var/log/syslog | grep "Your Tor server's identity key fingerprint is" -i
-tail /var/lib/tor/pt_state/obfs4_bridgeline.txt
-# TODO: Have these conviniently print in a single line, perhaps the full bridgeline
+BRIDGELINE=/bridgeline.txt
+PORT=6666
+
+FINGERPRINT=$(cat /var/log/syslog | grep "Your Tor server's identity key  fingerprint is" |\
+	sed -n 1p | cut -d "'" -f3 | cut -d " " -f2)
+tail -n 1 /var/lib/tor/pt_state/obfs4_bridgeline.txt > $BRIDGELINE
+
+sed -i "s/<PORT>/$PORT/g" $BRIDGELINE
+sed -i "s/obfs4/obfs5/g" $BRIDGELINE
+sed -i "s/<FINGERPRINT>/$FINGERPRINT/g" $BRIDGELINE
