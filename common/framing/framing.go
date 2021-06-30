@@ -17,7 +17,7 @@ import (
 const (
   // MaximumSegmentLength is the length of the largest possible segment
 	// including overhead.
-	MaximumSegmentLength = 1500 - 52
+	MaximumSegmentLength = 1500
 
   // LengthLength is the number of bytes used to represent length
   LengthLength = 2
