@@ -222,10 +222,10 @@ func (decoder *BaseDecoder) readPackets(conn net.Conn) (err error) {
 			break
 		}
 
-    err = decoder.ParsePacket(decoded, decLen)
-    if err != nil {
-      break
-    }
+		err = decoder.ParsePacket(decoded, decLen)
+		if err != nil {
+			break
+		}
 	}
 
 	// Read errors (all fatal) take priority over various frame processing
@@ -251,36 +251,36 @@ func (decoder *BaseDecoder) Decode(data []byte, frames *bytes.Buffer) (int, erro
 		}
 
 		lengthlength := make([]byte, decoder.LengthLength)
-	  _, err := io.ReadFull(frames, lengthlength[:])
-	  if err != nil {
-	    return 0, err
-	  }
-	  // Deobfuscate the length field.
-	  length, err := decoder.DecodeLength(lengthlength)
-    if err != nil {
-      return 0, err
-    }
-	  lengthMask := decoder.Drbg.NextBlock()
-    log.Debugf("length (raw): %d, length (mask): %d", length, lengthMask)
-	  length ^= binary.BigEndian.Uint16(lengthMask)
-    log.Debugf("First nextLength: %d", length)
-	  if MaximumSegmentLength - int(decoder.LengthLength) < int(length) || decoder.MinPayloadLength > int(length) {
-	    // Per "Plaintext Recovery Attacks Against SSH" by
-	    // Martin R. Albrecht, Kenneth G. Paterson and Gaven J. Watson,
-	    // there are a class of attacks againt protocols that use similar
-	    // sorts of framing schemes.
-	    //
-	    // While obfs4 should not allow plaintext recovery (CBC mode is
-	    // not used), attempt to mitigate out of bound frame length errors
-	    // by pretending that the length was a random valid range as per
-	    // the countermeasure suggested by Denis Bider in section 6 of the
-	    // paper.
-      log.Debugf("Bad length")
-	    decoder.NextLengthInvalid = true
-	    length = uint16(csrand.IntRange(decoder.MinPayloadLength, MaximumSegmentLength - int(decoder.LengthLength)))
-	  }
-    log.Debugf("Out nextLength: %d", length)
-	  decoder.NextLength = length
+		_, err := io.ReadFull(frames, lengthlength[:])
+		if err != nil {
+			return 0, err
+		}
+		// Deobfuscate the length field.
+		length, err := decoder.DecodeLength(lengthlength)
+		if err != nil {
+			return 0, err
+		}
+		lengthMask := decoder.Drbg.NextBlock()
+		log.Debugf("length (raw): %d, length (mask): %d", length, lengthMask)
+		length ^= binary.BigEndian.Uint16(lengthMask)
+		log.Debugf("First nextLength: %d", length)
+		if MaximumSegmentLength - int(decoder.LengthLength) < int(length) || decoder.MinPayloadLength > int(length) {
+			// Per "Plaintext Recovery Attacks Against SSH" by
+			// Martin R. Albrecht, Kenneth G. Paterson and Gaven J. Watson,
+			// there are a class of attacks againt protocols that use similar
+			// sorts of framing schemes.
+			//
+			// While obfs4 should not allow plaintext recovery (CBC mode is
+			// not used), attempt to mitigate out of bound frame length errors
+			// by pretending that the length was a random valid range as per
+			// the countermeasure suggested by Denis Bider in section 6 of the
+			// paper.
+			log.Debugf("Bad length")
+			decoder.NextLengthInvalid = true
+			length = uint16(csrand.IntRange(decoder.MinPayloadLength, MaximumSegmentLength - int(decoder.LengthLength)))
+		}
+		log.Debugf("Out nextLength: %d", length)
+		decoder.NextLength = length
 	}
 
 	if int(decoder.NextLength) > frames.Len() {
