@@ -15,20 +15,20 @@ import (
 )
 
 const (
-  // MaximumSegmentLength is the length of the largest possible segment
+	// MaximumSegmentLength is the length of the largest possible segment
 	// including overhead.
 	MaximumSegmentLength = 1500
 
-  // LengthLength is the number of bytes used to represent length
-  LengthLength = 2
+	// LengthLength is the number of bytes used to represent length
+	LengthLength = 2
 
-  // TypeLength is the number of bytes used to indicate packet type
-  TypeLength = 1
+	// TypeLength is the number of bytes used to indicate packet type
+	TypeLength = 1
 
-  // MaxFrameLength is the maximum frame length
-  // MaxFrameLength = MaximumSegmentLength - LengthLength
+	// MaxFrameLength is the maximum frame length
+	// MaxFrameLength = MaximumSegmentLength - LengthLength
 
-  ConsumeReadSize = MaximumSegmentLength * 16
+	ConsumeReadSize = MaximumSegmentLength * 16
 )
 
 // ErrAgain is the error returned when decoding requires more data to continue.
@@ -58,16 +58,16 @@ type processLengthFunc func(length uint16) ([]byte, error)
 
 // BaseEncoder implements the core encoder vars and functions
 type BaseEncoder struct {
-  Drbg *drbg.HashDrbg
-  MaxPacketPayloadLength int
-  LengthLength int
-  PayloadOverhead overheadFunc
+	Drbg			*drbg.HashDrbg
+	MaxPacketPayloadLength	int
+	LengthLength		int
+	PayloadOverhead		overheadFunc
 
-  Encode encodeFunc
-  ProcessLength processLengthFunc
-  ChopPayload chopPayloadFunc
+	Encode			encodeFunc
+	ProcessLength		processLengthFunc
+	ChopPayload		chopPayloadFunc
 
-  Type  string
+	Type  string
 }
 
 // TODO: Only do this for riverrun encoder
@@ -75,20 +75,20 @@ type BaseEncoder struct {
 func (encoder *BaseEncoder) MakePacket(w io.Writer, payload []byte) error {
 	// Encode the packet in an AEAD frame.
 	var frame [MaximumSegmentLength]byte
-  payloadLen := len(payload)
-  payloadLenWithOverhead0 := payloadLen+encoder.PayloadOverhead(payloadLen)
-  if len(frame) - encoder.LengthLength < payloadLenWithOverhead0 {
+	payloadLen := len(payload)
+	payloadLenWithOverhead0 := payloadLen+encoder.PayloadOverhead(payloadLen)
+	if len(frame) - encoder.LengthLength < payloadLenWithOverhead0 {
 		return io.ErrShortBuffer
 	}
-  length := uint16(payloadLenWithOverhead0)
-  lengthMask := encoder.Drbg.NextBlock()
+	length := uint16(payloadLenWithOverhead0)
+	lengthMask := encoder.Drbg.NextBlock()
 	length ^= binary.BigEndian.Uint16(lengthMask)
-  processedLength, err := encoder.ProcessLength(length)
-  if err != nil {
-    return err
-  }
+	processedLength, err := encoder.ProcessLength(length)
+	if err != nil {
+		return err
+	}
 	copy(frame[:encoder.LengthLength], processedLength)
-  frameLen := encoder.LengthLength + payloadLenWithOverhead0
+	frameLen := encoder.LengthLength + payloadLenWithOverhead0
 	payloadLenWithOverhead1, err := encoder.Encode(frame[encoder.LengthLength:], payload[:payloadLen])
 	if err != nil {
 		// All encoder errors are fatal.
@@ -123,7 +123,7 @@ func (encoder *BaseEncoder) Chop(b []byte, pktType uint8) (frameBuf bytes.Buffer
 			panic(fmt.Sprintf("BUG: Chop(), chopping length was 0"))
 		}
 		n += rdLen
-    err = encoder.MakePacket(&frameBuf, encoder.ChopPayload(pktType, payload[:rdLen]))
+		err = encoder.MakePacket(&frameBuf, encoder.ChopPayload(pktType, payload[:rdLen]))
 		if err != nil {
 			return frameBuf, 0, err
 		}
@@ -136,36 +136,37 @@ type decodePayloadfunc func(frames *bytes.Buffer) ([]byte, error)
 type parsePacketFunc func(decoded []byte, decLen int) error
 type cleanupfunc func() error
 type BaseDecoder struct {
-  Drbg *drbg.HashDrbg
-  LengthLength int
-  MinPayloadLength int
-  PacketOverhead int
-  MaxFramePayloadLength int
+	Drbg			*drbg.HashDrbg
+	LengthLength		int
+	MinPayloadLength	int
+	PacketOverhead		int
+	MaxFramePayloadLength	int
 
-  NextLength uint16
-  NextLengthInvalid bool
+	NextLength		uint16
+	NextLengthInvalid	bool
 
-  PayloadOverhead overheadFunc
+	PayloadOverhead		overheadFunc
 
-  DecodeLength decodeLengthfunc
-  DecodePayload decodePayloadfunc
-  ParsePacket parsePacketFunc
-  Cleanup cleanupfunc
+	DecodeLength		decodeLengthfunc
+	DecodePayload		decodePayloadfunc
+	ParsePacket		parsePacketFunc
+	Cleanup			cleanupfunc
 
-  ReceiveBuffer        *bytes.Buffer
-  ReceiveDecodedBuffer *bytes.Buffer
-  readBuffer           []byte
+	ReceiveBuffer		*bytes.Buffer
+	ReceiveDecodedBuffer	*bytes.Buffer
+	readBuffer		[]byte
 }
+
 func (decoder *BaseDecoder) InitBuffers() {
-  decoder.ReceiveBuffer = bytes.NewBuffer(nil)
-  decoder.ReceiveDecodedBuffer = bytes.NewBuffer(nil)
-  decoder.readBuffer = make([]byte, ConsumeReadSize)
+	decoder.ReceiveBuffer = bytes.NewBuffer(nil)
+	decoder.ReceiveDecodedBuffer = bytes.NewBuffer(nil)
+	decoder.readBuffer = make([]byte, ConsumeReadSize)
 }
 
 func (decoder *BaseDecoder) GetFrame(frames *bytes.Buffer) (int, []byte, error) {
 	maximumPayloadLength := MaximumSegmentLength - decoder.LengthLength
-  singleFrame := make([]byte, maximumPayloadLength)
-  n, err := io.ReadFull(frames, singleFrame[:decoder.NextLength])
+	singleFrame := make([]byte, maximumPayloadLength)
+	n, err := io.ReadFull(frames, singleFrame[:decoder.NextLength])
 	if err != nil {
 		return 0, nil, err
 	}
@@ -287,7 +288,7 @@ func (decoder *BaseDecoder) Decode(data []byte, frames *bytes.Buffer) (int, erro
 		return 0, ErrAgain
 	}
 
-  decodedPayload, err := decoder.DecodePayload(frames)
+	decodedPayload, err := decoder.DecodePayload(frames)
 	if err != nil {
 		return 0, err
 	}
@@ -305,16 +306,16 @@ func (decoder *BaseDecoder) Decode(data []byte, frames *bytes.Buffer) (int, erro
 
 // GenDrbg creates a *drbg.HashDrbg with some safety checks
 func GenDrbg(key []byte) *drbg.HashDrbg {
-  if len(key) != drbg.SeedLength {
-    panic(fmt.Sprintf("BUG: Failed to initialize DRBG: Invalid Keylength, must be %n (drbg.SeedLength)", drbg.SeedLength))
-  }
-  seed, err := drbg.SeedFromBytes(key[:])
+	if len(key) != drbg.SeedLength {
+		panic(fmt.Sprintf("BUG: Failed to initialize DRBG: Invalid Keylength, must be %d (drbg.SeedLength)", drbg.SeedLength))
+	}
+	seed, err := drbg.SeedFromBytes(key[:])
 	if err != nil {
 		panic(fmt.Sprintf("BUG: Failed to initialize DRBG: %s", err))
 	}
-  res, err := drbg.NewHashDrbg(seed)
-  if err != nil {
+	res, err := drbg.NewHashDrbg(seed)
+	if err != nil {
 		panic(fmt.Sprintf("BUG: Failed to initialize DRBG: %s", err))
 	}
-  return res
+	return res
 }
