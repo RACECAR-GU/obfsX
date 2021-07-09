@@ -1,6 +1,7 @@
 package riverrun
 
 import (
+	"io"
 	"net"
 	"fmt"
 	"bytes"
@@ -23,10 +24,12 @@ type Conn struct {
 	// Embeds a net.Conn and inherits its members.
 	net.Conn
 
-	bias float64
+	bias	float64
+	mss_max	int
+	mss_dev	float64
 
-	Encoder *riverrunEncoder
-	Decoder *riverrunDecoder
+	Encoder	*riverrunEncoder
+	Decoder	*riverrunDecoder
 }
 
 func NewConn(conn net.Conn, isServer bool, seed *drbg.Seed) (*Conn, error) {
@@ -93,6 +96,8 @@ func NewConn(conn net.Conn, isServer bool, seed *drbg.Seed) (*Conn, error) {
 	rr := new(Conn)
 	rr.Conn = conn
 	rr.bias = bias
+	rr.mss_max = int(rng.Float64() * float64(800)) + 600
+	rr.mss_dev = rng.Float64() * 4
 	// Encoder
 	rr.Encoder = newRiverrunEncoder(writeKey, writeStream, table8, table16, compressedBlockBits, expandedBlockBits)
 	log.Debugf("riverrun: Encoder initialized")
@@ -301,21 +306,50 @@ func (decoder *riverrunDecoder) compressBytes(raw, res []byte) error {
 	return ctstretch.CompressBytes(raw, res, decoder.expandedBlockBits, decoder.compressedBlockBits, decoder.revTable16, decoder.revTable8, decoder.readStream, rand.Int())
 }
 
+func (rr *Conn) nextLength() int {
+	noise := rand.NormFloat64() * rr.mss_dev
+	if noise < 0 {
+		noise = noise * -1
+	}
+	if int(noise) >= rr.mss_max {
+		return rr.nextLength()
+	}
+	return rr.mss_max - int(noise)
+}
+
 func (rr *Conn) Write(b []byte) (n int, err error) {
 
+	// XXX: n could be more accurate
 	var frameBuf bytes.Buffer
 	frameBuf, n, err = rr.Encoder.Chop(b, PacketTypePayload)
 	if err != nil {
 		return
 	}
 
-	_, err = rr.Conn.Write(frameBuf.Bytes())
+	// We do obfuscation here - experimental results found the
+	//	constant near MSS sizes were detectable
+	for {
+		nextLength := rr.nextLength()
+		toWire := make([]byte, nextLength)
+
+		_, err = frameBuf.Read(toWire)
+		if err != nil {
+			if err == io.EOF {
+				err = nil
+			}
+			return
+		}
+
+		_, err = rr.Conn.Write(toWire)
+		if err != nil {
+			return
+		}
+	}
 
 	//log.Debugf("Riverrun: %d expanded to %d ->", n, lowerConnN)
 	// TODO: What does spec say about returned numbers?
 	//	 Should they be bytes written, or the raw bytes before expansion expanded?
 	// Idea: Bytes written (raw), Bytes written (processed), err - raw bytes is equivalent to old n
-	return
 }
 
 func (rr *Conn) Read(b []byte) (int, error) {

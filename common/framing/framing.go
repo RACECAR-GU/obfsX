@@ -17,7 +17,7 @@ import (
 const (
 	// MaximumSegmentLength is the length of the largest possible segment
 	// including overhead.
-	MaximumSegmentLength = 1500
+	MaximumSegmentLength = 1500-52
 
 	// LengthLength is the number of bytes used to represent length
 	LengthLength = 2
@@ -95,9 +95,9 @@ func (encoder *BaseEncoder) MakePacket(w io.Writer, payload []byte) error {
 		return err
 	}
 
-  if payloadLenWithOverhead0 != payloadLenWithOverhead1 {
-    panic(fmt.Sprintf("BUG: MakePacket(), frame lengths do not align, %d %d", payloadLenWithOverhead0, payloadLenWithOverhead1))
-  }
+	if payloadLenWithOverhead0 != payloadLenWithOverhead1 {
+		panic(fmt.Sprintf("BUG: MakePacket(), frame lengths do not align, %d %d", payloadLenWithOverhead0, payloadLenWithOverhead1))
+	}
 
 	wrLen, err := w.Write(frame[:frameLen])
 	if err != nil {
