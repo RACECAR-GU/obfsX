@@ -98,6 +98,7 @@ func NewConn(conn net.Conn, isServer bool, seed *drbg.Seed) (*Conn, error) {
 	rr.bias = bias
 	rr.mss_max = int(rng.Float64() * float64(800)) + 600
 	rr.mss_dev = rng.Float64() * 4
+	log.Infof("Set mss_max to %v, mss_dev to %v", rr.mss_max, rr.mss_dev)
 	// Encoder
 	rr.Encoder = newRiverrunEncoder(writeKey, writeStream, table8, table16, compressedBlockBits, expandedBlockBits)
 	log.Debugf("riverrun: Encoder initialized")
@@ -330,6 +331,7 @@ func (rr *Conn) Write(b []byte) (n int, err error) {
 	//	constant near MSS sizes were detectable
 	for {
 		nextLength := rr.nextLength()
+		log.Debugf("Next length: %v", nextLength)
 		toWire := make([]byte, nextLength)
 
 		_, err = frameBuf.Read(toWire)
