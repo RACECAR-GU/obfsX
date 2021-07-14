@@ -1,9 +1,11 @@
 package riverrun
 
 import (
+	"io"
 	"net"
 	"fmt"
 	"bytes"
+	"syscall"
 	"crypto/aes"
 	"crypto/cipher"
 	"math/rand"
@@ -23,19 +25,33 @@ type Conn struct {
 	// Embeds a net.Conn and inherits its members.
 	net.Conn
 
-	bias float64
+	bias	float64
+	mss_max	int
+	mss_dev	float64
 
-	Encoder *riverrunEncoder
-	Decoder *riverrunDecoder
+	Encoder	*riverrunEncoder
+	Decoder	*riverrunDecoder
 }
 
-func NewConn(conn net.Conn, isServer bool, seed *drbg.Seed) (*Conn, error) {
-
+func get_rng(seed *drbg.Seed) (*rand.Rand, error) {
 	xdrbg, err := drbg.NewHashDrbg(seed)
 	if err != nil {
 		return nil, err
 	}
-	rng := rand.New(xdrbg)
+	return rand.New(xdrbg), nil
+}
+
+func get_mss(seed *drbg.Seed) (int, error) {
+	rng, err := get_rng(seed)
+	if err != nil {
+		return 0, err
+	}
+	return int(rng.Float64() * float64(800)) + 600, nil
+}
+
+func NewConn(conn net.Conn, isServer bool, seed *drbg.Seed) (*Conn, error) {
+
+	rng, err := get_rng(seed)
 
 	key := make([]byte, 16)
 	rng.Read(key)
@@ -93,6 +109,12 @@ func NewConn(conn net.Conn, isServer bool, seed *drbg.Seed) (*Conn, error) {
 	rr := new(Conn)
 	rr.Conn = conn
 	rr.bias = bias
+	rr.mss_max, err = get_mss(seed)
+	if err != nil {
+		return nil, err
+	}
+	rr.mss_dev = rng.Float64() * 4
+	log.Infof("Set mss_max to %v, mss_dev to %v", rr.mss_max, rr.mss_dev)
 	// Encoder
 	rr.Encoder = newRiverrunEncoder(writeKey, writeStream, table8, table16, compressedBlockBits, expandedBlockBits)
 	log.Debugf("riverrun: Encoder initialized")
@@ -100,6 +122,25 @@ func NewConn(conn net.Conn, isServer bool, seed *drbg.Seed) (*Conn, error) {
 	rr.Decoder = newRiverrunDecoder(readKey, readStream, ctstretch.InvertTable(table8), ctstretch.InvertTable(table16), compressedBlockBits, expandedBlockBits)
 	log.Debugf("riverrun: Initialized")
 	return rr, nil
+}
+
+func Get_control_fn(seed *drbg.Seed) (func(string, string, syscall.RawConn) error, error) {
+	mss_max, err := get_mss(seed)
+	if err != nil {
+		return nil, err
+	}
+	return func(network, address string, c syscall.RawConn) error {
+		set_mss := func(fd uintptr) {
+			err := syscall.SetsockoptInt(int(fd), syscall.IPPROTO_TCP, syscall.TCP_MAXSEG, mss_max)
+			if err != nil {
+				panic("rr: Control fn - failed setting mss_max") // XXX: We are paranoid here
+			}
+			val, _ := syscall.GetsockoptInt(int(fd), syscall.IPPROTO_TCP, syscall.TCP_MAXSEG)
+			log.Debugf("Set maxseg to %v", val)
+		}
+		err := c.Control(set_mss)
+		return err
+	}, nil
 }
 
 var cache8	map[string][]uint64
@@ -301,21 +342,52 @@ func (decoder *riverrunDecoder) compressBytes(raw, res []byte) error {
 	return ctstretch.CompressBytes(raw, res, decoder.expandedBlockBits, decoder.compressedBlockBits, decoder.revTable16, decoder.revTable8, decoder.readStream, rand.Int())
 }
 
+func (rr *Conn) nextLength() int {
+	noise := rand.NormFloat64() * rr.mss_dev
+	if noise < 0 {
+		noise = noise * -1
+	}
+	if int(noise) >= rr.mss_max {
+		return rr.nextLength()
+	}
+	return rr.mss_max - int(noise)
+}
+
 func (rr *Conn) Write(b []byte) (n int, err error) {
 
+	// XXX: n could be more accurate
 	var frameBuf bytes.Buffer
 	frameBuf, n, err = rr.Encoder.Chop(b, PacketTypePayload)
 	if err != nil {
 		return
 	}
 
-	_, err = rr.Conn.Write(frameBuf.Bytes())
+	// We do obfuscation here - experimental results found the
+	//	constant near MSS sizes were detectable
+	for {
+		nextLength := rr.nextLength()
+		toWire := make([]byte, nextLength)
+
+		s, e := frameBuf.Read(toWire)
+		if e != nil {
+			if e != io.EOF {
+				err = e
+			}
+			return
+		}
+
+		log.Debugf("Next length: %v", s)
+
+		_, err = rr.Conn.Write(toWire[:s])
+		if err != nil {
+			return
+		}
+	}
 
 	//log.Debugf("Riverrun: %d expanded to %d ->", n, lowerConnN)
 	// TODO: What does spec say about returned numbers?
 	//	 Should they be bytes written, or the raw bytes before expansion expanded?
 	// Idea: Bytes written (raw), Bytes written (processed), err - raw bytes is equivalent to old n
-	return
 }
 
 func (rr *Conn) Read(b []byte) (int, error) {

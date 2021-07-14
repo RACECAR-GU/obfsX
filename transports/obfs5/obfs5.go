@@ -89,7 +89,7 @@ type ClientFactory struct {
 	*obfs4.ClientFactory
 }
 
-func (cf *ClientFactory) Dial(network, addr string, dialFn base.DialFunc, args interface{}) (net.Conn, error) {
+func (cf *ClientFactory) Dial(network, addr string, dialer net.Dialer, args interface{}) (net.Conn, error) {
 	// Validate args before bothering to open connection.
 	ca := new(ClientArgs)
 	// XXX: Just realized I messed up here - should parse to obfs5 right away
@@ -98,7 +98,16 @@ func (cf *ClientFactory) Dial(network, addr string, dialFn base.DialFunc, args i
 		return nil, fmt.Errorf("invalid argument type for args")
 	}
 	ca.ClientArgs = subca
-	conn, err := dialFn(network, addr)
+	serverSeed, err := drbg.SeedFromBytes(ca.PublicKey[:drbg.SeedLength])
+	if err != nil {
+		return nil, err
+	}
+	ctrl, err := riverrun.Get_control_fn(serverSeed)
+	if err != nil {
+		return nil, err
+	}
+	dialer.Control = ctrl
+	conn, err := dialer.Dial(network, addr)
 	if err != nil {
 		return nil, err
 	}
