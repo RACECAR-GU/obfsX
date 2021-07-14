@@ -216,13 +216,13 @@ func (cf *ClientFactory) ParseArgs(args *pt.Args) (interface{}, error) {
 	return &ClientArgs{nodeID, publicKey, sessionKey, iatMode}, nil
 }
 
-func (cf *ClientFactory) Dial(network, addr string, dialFn base.DialFunc, args interface{}) (net.Conn, error) {
+func (cf *ClientFactory) Dial(network, addr string, dialer net.Dialer, args interface{}) (net.Conn, error) {
 	// Validate args before bothering to open connection.
 	ca, ok := args.(*ClientArgs)
 	if !ok {
 		return nil, fmt.Errorf("invalid argument type for args")
 	}
-	conn, err := dialFn(network, addr)
+	conn, err := dialer.Dial(network, addr)
 	if err != nil {
 		return nil, err
 	}

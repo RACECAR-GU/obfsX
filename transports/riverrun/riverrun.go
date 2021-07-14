@@ -5,6 +5,7 @@ import (
 	"net"
 	"fmt"
 	"bytes"
+	"syscall"
 	"crypto/aes"
 	"crypto/cipher"
 	"math/rand"
@@ -32,13 +33,25 @@ type Conn struct {
 	Decoder	*riverrunDecoder
 }
 
-func NewConn(conn net.Conn, isServer bool, seed *drbg.Seed) (*Conn, error) {
-
+func get_rng(seed *drbg.Seed) (*rand.Rand, error) {
 	xdrbg, err := drbg.NewHashDrbg(seed)
 	if err != nil {
 		return nil, err
 	}
-	rng := rand.New(xdrbg)
+	return rand.New(xdrbg), nil
+}
+
+func get_mss(seed *drbg.Seed) (int, error) {
+	rng, err := get_rng(seed)
+	if err != nil {
+		return 0, err
+	}
+	return int(rng.Float64() * float64(800)) + 600, nil
+}
+
+func NewConn(conn net.Conn, isServer bool, seed *drbg.Seed) (*Conn, error) {
+
+	rng, err := get_rng(seed)
 
 	key := make([]byte, 16)
 	rng.Read(key)
@@ -96,7 +109,10 @@ func NewConn(conn net.Conn, isServer bool, seed *drbg.Seed) (*Conn, error) {
 	rr := new(Conn)
 	rr.Conn = conn
 	rr.bias = bias
-	rr.mss_max = int(rng.Float64() * float64(800)) + 600
+	rr.mss_max, err = get_mss(seed)
+	if err != nil {
+		return nil, err
+	}
 	rr.mss_dev = rng.Float64() * 4
 	log.Infof("Set mss_max to %v, mss_dev to %v", rr.mss_max, rr.mss_dev)
 	// Encoder
@@ -106,6 +122,25 @@ func NewConn(conn net.Conn, isServer bool, seed *drbg.Seed) (*Conn, error) {
 	rr.Decoder = newRiverrunDecoder(readKey, readStream, ctstretch.InvertTable(table8), ctstretch.InvertTable(table16), compressedBlockBits, expandedBlockBits)
 	log.Debugf("riverrun: Initialized")
 	return rr, nil
+}
+
+func Get_control_fn(seed *drbg.Seed) (func(string, string, syscall.RawConn) error, error) {
+	mss_max, err := get_mss(seed)
+	if err != nil {
+		return nil, err
+	}
+	return func(network, address string, c syscall.RawConn) error {
+		set_mss := func(fd uintptr) {
+			err := syscall.SetsockoptInt(int(fd), syscall.IPPROTO_TCP, syscall.TCP_MAXSEG, mss_max)
+			if err != nil {
+				panic("rr: Control fn - failed setting mss_max") // XXX: We are paranoid here
+			}
+			val, _ := syscall.GetsockoptInt(int(fd), syscall.IPPROTO_TCP, syscall.TCP_MAXSEG)
+			log.Debugf("Set maxseg to %v", val)
+		}
+		err := c.Control(set_mss)
+		return err
+	}, nil
 }
 
 var cache8	map[string][]uint64
@@ -331,18 +366,19 @@ func (rr *Conn) Write(b []byte) (n int, err error) {
 	//	constant near MSS sizes were detectable
 	for {
 		nextLength := rr.nextLength()
-		log.Debugf("Next length: %v", nextLength)
 		toWire := make([]byte, nextLength)
 
-		_, err = frameBuf.Read(toWire)
-		if err != nil {
-			if err == io.EOF {
-				err = nil
+		s, e := frameBuf.Read(toWire)
+		if e != nil {
+			if e != io.EOF {
+				err = e
 			}
 			return
 		}
 
-		_, err = rr.Conn.Write(toWire)
+		log.Debugf("Next length: %v", s)
+
+		_, err = rr.Conn.Write(toWire[:s])
 		if err != nil {
 			return
 		}

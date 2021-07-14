@@ -31,11 +31,8 @@ package base // import "github.com/RACECAR-GU/obfsX/transports/base"
 
 import (
 	"net"
-
 	"git.torproject.org/pluggable-transports/goptlib.git"
 )
-
-type DialFunc func(string, string) (net.Conn, error)
 
 // ClientFactory is the interface that defines the factory for creating
 // pluggable transport protocol client instances.
@@ -53,7 +50,7 @@ type ClientFactory interface {
 	// Dial creates an outbound net.Conn, and does whatever is required
 	// (eg: handshaking) to get the connection to the point where it is
 	// ready to relay data.
-	Dial(network, address string, dialFn DialFunc, args interface{}) (net.Conn, error)
+	Dial(network, address string, dialer net.Dialer, args interface{}) (net.Conn, error)
 }
 
 // ServerFactory is the interface that defines the factory for creating

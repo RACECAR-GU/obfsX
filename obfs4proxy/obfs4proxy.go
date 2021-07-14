@@ -46,7 +46,6 @@ import (
 	"github.com/RACECAR-GU/obfsX/common/socks5"
 	"github.com/RACECAR-GU/obfsX/transports"
 	"github.com/RACECAR-GU/obfsX/transports/base"
-	"golang.org/x/net/proxy"
 )
 
 const (
@@ -144,19 +143,8 @@ func clientHandler(f base.ClientFactory, conn net.Conn, proxyURI *url.URL) {
 	}
 
 	// Obtain the proxy dialer if any, and create the outgoing TCP connection.
-	dialFn := proxy.Direct.Dial
-	if proxyURI != nil {
-		dialer, err := proxy.FromURL(proxyURI, proxy.Direct)
-		if err != nil {
-			// This should basically never happen, since config protocol
-			// verifies this.
-			log.Errorf("%s(%s) - failed to obtain proxy dialer: %s", name, addrStr, log.ElideError(err))
-			_ = socksReq.Reply(socks5.ReplyGeneralFailure)
-			return
-		}
-		dialFn = dialer.Dial
-	}
-	remote, err := f.Dial("tcp", socksReq.Target, dialFn, args)
+	var dialer net.Dialer
+	remote, err := f.Dial("tcp", socksReq.Target, dialer, args)
 	if err != nil {
 		log.Errorf("%s(%s) - outgoing connection failed: %s", name, addrStr, log.ElideError(err))
 		_ = socksReq.Reply(socks5.ErrorToReplyCode(err))

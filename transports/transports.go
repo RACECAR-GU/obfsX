@@ -34,10 +34,8 @@ import (
 	"sync"
 
 	"github.com/RACECAR-GU/obfsX/transports/base"
-	"github.com/RACECAR-GU/obfsX/transports/obfs3"
 	"github.com/RACECAR-GU/obfsX/transports/obfs4"
 	"github.com/RACECAR-GU/obfsX/transports/obfs5"
-	"github.com/RACECAR-GU/obfsX/transports/scramblesuit"
 )
 
 var transportMapLock sync.Mutex
@@ -84,10 +82,8 @@ func Get(name string) base.Transport {
 // Init initializes all of the integrated transports.
 func Init() error {
 	for _, v := range []base.Transport{
-		new(obfs3.Transport),
 		new(obfs4.Transport),
 		new(obfs5.Transport),
-		new(scramblesuit.Transport),
 	} {
 		if err := Register(v); err != nil {
 			return err
