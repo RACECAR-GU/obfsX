@@ -84,6 +84,8 @@ func clientSetup() (launched bool, listeners []net.Listener) {
 			continue
 		}
 
+		// TODO: Adjust this more for listeners of other transport types
+		//	 or do obfsTT...
 		ln, err := net.Listen("tcp", socksAddr)
 		if err != nil {
 			_ = pt.CmethodError(name, err.Error())
