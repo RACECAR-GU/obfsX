@@ -164,96 +164,6 @@ func clientHandler(f base.ClientFactory, conn net.Conn, proxyURI *url.URL) {
 	}
 }
 
-func serverSetup() (launched bool, listeners []net.Listener) {
-	ptServerInfo, err := pt.ServerSetup(transports.Transports())
-	if err != nil {
-		golog.Fatal(err)
-	}
-
-	for _, bindaddr := range ptServerInfo.Bindaddrs {
-		name := bindaddr.MethodName
-		t := transports.Get(name)
-		if t == nil {
-			_ = pt.SmethodError(name, "no such transport is supported")
-			continue
-		}
-
-		f, err := t.ServerFactory(stateDir, &bindaddr.Options)
-		if err != nil {
-			_ = pt.SmethodError(name, err.Error())
-			continue
-		}
-
-		ln, err := net.ListenTCP("tcp", bindaddr.Addr)
-		if err != nil {
-			_ = pt.SmethodError(name, err.Error())
-			continue
-		}
-
-		go func() {
-			_ = serverAcceptLoop(f, ln, &ptServerInfo)
-		}()
-		if args := f.Args(); args != nil {
-			pt.SmethodArgs(name, ln.Addr(), *args)
-		} else {
-			pt.SmethodArgs(name, ln.Addr(), nil)
-		}
-
-		log.Infof("%s - registered listener: %s", name, log.ElideAddr(ln.Addr().String()))
-
-		listeners = append(listeners, ln)
-		launched = true
-	}
-	pt.SmethodsDone()
-
-	return
-}
-
-func serverAcceptLoop(f base.ServerFactory, ln net.Listener, info *pt.ServerInfo) error {
-	defer ln.Close()
-	for {
-		conn, err := ln.Accept()
-		if err != nil {
-			if e, ok := err.(net.Error); ok && !e.Temporary() {
-				return err
-			}
-			continue
-		}
-		go serverHandler(f, conn, info)
-	}
-}
-
-func serverHandler(f base.ServerFactory, conn net.Conn, info *pt.ServerInfo) {
-	defer conn.Close()
-	termMon.onHandlerStart()
-	defer termMon.onHandlerFinish()
-
-	name := f.Transport().Name()
-	addrStr := log.ElideAddr(conn.RemoteAddr().String())
-	log.Infof("%s(%s) - new connection", name, addrStr)
-
-	// Instantiate the server transport method and handshake.
-	remote, err := f.WrapConn(conn)
-	if err != nil {
-		log.Warnf("%s(%s) - handshake failed: %s", name, addrStr, log.ElideError(err))
-		return
-	}
-
-	// Connect to the orport.
-	orConn, err := pt.DialOr(info, conn.RemoteAddr().String(), name)
-	if err != nil {
-		log.Errorf("%s(%s) - failed to connect to ORPort: %s", name, addrStr, log.ElideError(err))
-		return
-	}
-	defer orConn.Close()
-
-	if err = copyLoop(orConn, remote); err != nil {
-		log.Warnf("%s(%s) - closed connection: %s", name, addrStr, log.ElideError(err))
-	} else {
-		log.Infof("%s(%s) - closed connection", name, addrStr)
-	}
-}
-
 func copyLoop(a net.Conn, b net.Conn) error {
 	// Note: b is always the pt connection.  a is the SOCKS/ORPort connection.
 	errChan := make(chan error, 2)
@@ -293,77 +203,77 @@ func getVersion() string {
 }
 
 func main() {
-	// Initialize the termination state monitor as soon as possible.
-	termMon = newTermMonitor()
-
-	// Handle the command line arguments.
+	// TODO: Eventually loop in the proxy here
 	_, execName := path.Split(os.Args[0])
-	showVer := flag.Bool("version", false, "Print version and exit")
-	logLevelStr := flag.String("logLevel", "ERROR", "Log level (ERROR/WARN/INFO/DEBUG)")
-	enableLogging := flag.Bool("enableLogging", false, "Log to TOR_PT_STATE_LOCATION/"+obfs4proxyLogFile)
-	unsafeLogging := flag.Bool("unsafeLogging", false, "Disable the address scrubber")
-	flag.Parse()
-
-	if *showVer {
-		fmt.Printf("%s\n", getVersion())
-		os.Exit(0)
-	}
-	if err := log.SetLogLevel(*logLevelStr); err != nil {
-		golog.Fatalf("[ERROR]: %s - failed to set log level: %s", execName, err)
-	}
-
-	// Determine if this is a client or server, initialize the common state.
-	var ptListeners []net.Listener
-	var launched bool
 	isClient, err := ptIsClient()
 	if err != nil {
 		golog.Fatalf("[ERROR]: %s - must be run as a managed transport", execName)
 	}
-	if stateDir, err = pt.MakeStateDir(); err != nil {
-		golog.Fatalf("[ERROR]: %s - No state directory: %s", execName, err)
-	}
-	if err = log.Init(*enableLogging, path.Join(stateDir, obfs4proxyLogFile), *unsafeLogging); err != nil {
-		golog.Fatalf("[ERROR]: %s - failed to initialize logging", execName)
-	}
-	if err = transports.Init(); err != nil {
-		log.Errorf("%s - failed to initialize transports: %s", execName, err)
-		os.Exit(-1)
-	}
+	if !isClient {
+		golog.Fatalf("[ERROR]: Cannot be run on a server, run the Snowflake server")
+	} else {
+		// Initialize the termination state monitor as soon as possible.
+		termMon = newTermMonitor()
 
-	log.Noticef("%s - launched", getVersion())
+		// Handle the command line arguments.
+		showVer := flag.Bool("version", false, "Print version and exit")
+		logLevelStr := flag.String("logLevel", "ERROR", "Log level (ERROR/WARN/INFO/DEBUG)")
+		enableLogging := flag.Bool("enableLogging", false, "Log to TOR_PT_STATE_LOCATION/"+obfs4proxyLogFile)
+		unsafeLogging := flag.Bool("unsafeLogging", false, "Disable the address scrubber")
+		flag.Parse()
 
-	// Do the managed pluggable transport protocol configuration.
-	if isClient {
+		if *showVer {
+			fmt.Printf("%s\n", getVersion())
+			os.Exit(0)
+		}
+		if err := log.SetLogLevel(*logLevelStr); err != nil {
+			golog.Fatalf("[ERROR]: %s - failed to set log level: %s", execName, err)
+		}
+
+		// Determine if this is a client or server, initialize the common state.
+		var ptListeners []net.Listener
+		var launched bool
+		if stateDir, err = pt.MakeStateDir(); err != nil {
+			golog.Fatalf("[ERROR]: %s - No state directory: %s", execName, err)
+		}
+		if err = log.Init(*enableLogging, path.Join(stateDir, obfs4proxyLogFile), *unsafeLogging); err != nil {
+			golog.Fatalf("[ERROR]: %s - failed to initialize logging", execName)
+		}
+		if err = transports.Init(); err != nil {
+			log.Errorf("%s - failed to initialize transports: %s", execName, err)
+			os.Exit(-1)
+		}
+
+		log.Noticef("%s - launched", getVersion())
+
+		// Do the managed pluggable transport protocol configuration.
 		log.Infof("%s - initializing client transport listeners", execName)
 		launched, ptListeners = clientSetup()
-	} else {
-		log.Infof("%s - initializing server transport listeners", execName)
-		launched, ptListeners = serverSetup()
-	}
-	if !launched {
-		// Initialization failed, the client or server setup routines should
-		// have logged, so just exit here.
-		os.Exit(-1)
-	}
+		if !launched {
+			// Initialization failed, the client or server setup routines should
+			// have logged, so just exit here.
+			os.Exit(-1)
+		}
 
-	log.Infof("%s - accepting connections", execName)
-	defer func() {
-		log.Noticef("%s - terminated", execName)
-	}()
+		log.Infof("%s - accepting connections", execName)
+		defer func() {
+			log.Noticef("%s - terminated", execName)
+		}()
 
-	// At this point, the pt config protocol is finished, and incoming
-	// connections will be processed.  Wait till the parent dies
-	// (immediate exit), a SIGTERM is received (immediate exit),
-	// or a SIGINT is received.
-	if sig := termMon.wait(false); sig == syscall.SIGTERM {
-		return
-	}
+		// At this point, the pt config protocol is finished, and incoming
+		// connections will be processed.  Wait till the parent dies
+		// (immediate exit), a SIGTERM is received (immediate exit),
+		// or a SIGINT is received.
+		if sig := termMon.wait(false); sig == syscall.SIGTERM {
+			return
+		}
 
-	// Ok, it was the first SIGINT, close all listeners, and wait till,
-	// the parent dies, all the current connections are closed, or either
-	// a SIGINT/SIGTERM is received, and exit.
-	for _, ln := range ptListeners {
-		ln.Close()
+		// Ok, it was the first SIGINT, close all listeners, and wait till,
+		// the parent dies, all the current connections are closed, or either
+		// a SIGINT/SIGTERM is received, and exit.
+		for _, ln := range ptListeners {
+			ln.Close()
+		}
+		termMon.wait(true)
 	}
-	termMon.wait(true)
 }

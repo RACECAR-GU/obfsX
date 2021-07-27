@@ -106,7 +106,7 @@ func (t *Transport) ClientFactory(stateDir string) (base.ClientFactory, error) {
 	return cf, nil
 }
 
-func NewServerFactory(t base.Transport, stateDir string, args *pt.Args) (*ServerFactory, error) {
+func NewProxyFactory(t base.Transport, stateDir string, args *pt.Args) (*ProxyFactory, error) {
 	st, err := serverStateFromArgs(stateDir, args)
 	if err != nil {
 		return nil, err
@@ -140,13 +140,13 @@ func NewServerFactory(t base.Transport, stateDir string, args *pt.Args) (*Server
 	}
 	rng := rand.New(drbg)
 
-	sf := &ServerFactory{t, &ptArgs, st.nodeID, st.identityKey, st.drbgSeed, iatSeed, st.iatMode, filter, rng.Intn(maxCloseDelay)}
-	return sf, nil
+	pf := &ProxyFactory{t, &ptArgs, st.nodeID, st.identityKey, st.drbgSeed, iatSeed, st.iatMode, filter, rng.Intn(maxCloseDelay)}
+	return pf, nil
 }
 
 // ServerFactory returns a new ServerFactory instance.
-func (t *Transport) ServerFactory(stateDir string, args *pt.Args) (base.ServerFactory, error) {
-	return NewServerFactory(t, stateDir, args)
+func (t *Transport) ProxyFactory(stateDir string, args *pt.Args) (base.ProxyFactory, error) {
+	return NewProxyFactory(t, stateDir, args)
 }
 
 type ClientFactory struct {
@@ -234,7 +234,7 @@ func (cf *ClientFactory) Dial(network, addr string, dialer net.Dialer, args inte
 	return conn, nil
 }
 
-type ServerFactory struct {
+type ProxyFactory struct {
 	transport base.Transport
 	args      *pt.Args
 
@@ -248,15 +248,15 @@ type ServerFactory struct {
 	closeDelay int
 }
 
-func (sf *ServerFactory) Transport() base.Transport {
-	return sf.transport
+func (pf *ProxyFactory) Transport() base.Transport {
+	return pf.transport
 }
 
-func (sf *ServerFactory) Args() *pt.Args {
-	return sf.args
+func (pf *ProxyFactory) Args() *pt.Args {
+	return pf.args
 }
 
-func (sf *ServerFactory) WrapConn(conn net.Conn) (net.Conn, error) {
+func (pf *ProxyFactory) WrapConn(conn net.Conn) (net.Conn, error) {
 	// Not much point in having a separate newServerConn routine when
 	// wrapping requires using values from the factory instance.
 
@@ -270,18 +270,18 @@ func (sf *ServerFactory) WrapConn(conn net.Conn) (net.Conn, error) {
 		return nil, err
 	}
 
-	lenDist := probdist.New(sf.lenSeed, 0, f.MaximumSegmentLength, biasedDist)
+	lenDist := probdist.New(pf.lenSeed, 0, f.MaximumSegmentLength, biasedDist)
 	var iatDist *probdist.WeightedDist
-	if sf.iatSeed != nil {
-		iatDist = probdist.New(sf.iatSeed, 0, maxIATDelay, biasedDist)
+	if pf.iatSeed != nil {
+		iatDist = probdist.New(pf.iatSeed, 0, maxIATDelay, biasedDist)
 	}
 
-	c := &Conn{conn, true, lenDist, iatDist, sf.iatMode, nil, nil, false}
+	c := &Conn{conn, true, lenDist, iatDist, pf.iatMode, nil, nil, false}
 
 	startTime := time.Now()
 
-	if err = c.serverHandshake(sf, sessionKey); err != nil {
-		c.closeAfterDelay(sf, startTime)
+	if err = c.serverHandshake(pf, sessionKey); err != nil {
+		c.closeAfterDelay(pf, startTime)
 		return nil, err
 	}
 
@@ -401,13 +401,13 @@ func (conn *Conn) newDecoder(key []byte) {
 	conn.decoder = decoder
 }
 
-func (conn *Conn) serverHandshake(sf *ServerFactory, sessionKey *ntor.Keypair) error {
+func (conn *Conn) serverHandshake(pf *ProxyFactory, sessionKey *ntor.Keypair) error {
 	if !conn.isServer {
 		return fmt.Errorf("serverHandshake called on client connection")
 	}
 
 	// Generate the server handshake, and arm the base timeout.
-	hs := newServerHandshake(sf.nodeID, sf.identityKey, sessionKey)
+	hs := newServerHandshake(pf.nodeID, pf.identityKey, sessionKey)
 	if err := conn.Conn.SetDeadline(time.Now().Add(serverHandshakeTimeout)); err != nil {
 		return err
 	}
@@ -424,7 +424,7 @@ func (conn *Conn) serverHandshake(sf *ServerFactory, sessionKey *ntor.Keypair) e
 		}
 		receiveBuffer.Write(hsBuf[:n])
 
-		seed, err := hs.parseClientHandshake(sf.replayFilter, receiveBuffer.Bytes())
+		seed, err := hs.parseClientHandshake(pf.replayFilter, receiveBuffer.Bytes())
 		if err == ErrMarkNotFoundYet {
 			continue
 		} else if err != nil {
@@ -464,7 +464,7 @@ func (conn *Conn) serverHandshake(sf *ServerFactory, sessionKey *ntor.Keypair) e
 	}
 
 	// Send the PRNG seed as the first packet.
-	if err := conn.encoder.MakePacket(&frameBuf, MakePayload(framing.PacketTypePrngSeed, sf.lenSeed.Bytes()[:], 0)); err != nil {
+	if err := conn.encoder.MakePacket(&frameBuf, MakePayload(framing.PacketTypePrngSeed, pf.lenSeed.Bytes()[:], 0)); err != nil {
 		return err
 	}
 	if _, err = conn.Conn.Write(frameBuf.Bytes()); err != nil {
@@ -582,11 +582,11 @@ func (conn *Conn) SetWriteDeadline(t time.Time) error {
 	return syscall.ENOTSUP
 }
 
-func (conn *Conn) closeAfterDelay(sf *ServerFactory, startTime time.Time) {
+func (conn *Conn) closeAfterDelay(pf *ProxyFactory, startTime time.Time) {
 	// I-it's not like I w-wanna handshake with you or anything.  B-b-baka!
 	defer conn.Conn.Close()
 
-	delay := time.Duration(sf.closeDelay)*time.Second + serverHandshakeTimeout
+	delay := time.Duration(pf.closeDelay)*time.Second + serverHandshakeTimeout
 	deadline := startTime.Add(delay)
 	if time.Now().After(deadline) {
 		return
@@ -674,6 +674,6 @@ func init() {
 }
 
 var _ base.ClientFactory = (*ClientFactory)(nil)
-var _ base.ServerFactory = (*ServerFactory)(nil)
+var _ base.ProxyFactory = (*ProxyFactory)(nil)
 var _ base.Transport = (*Transport)(nil)
 var _ net.Conn = (*Conn)(nil)

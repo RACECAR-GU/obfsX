@@ -1,0 +1,94 @@
+
+func serverSetup() (launched bool, listeners []net.Listener) {
+	ptServerInfo, err := pt.ServerSetup(transports.Transports())
+	if err != nil {
+		golog.Fatal(err)
+	}
+
+	for _, bindaddr := range ptServerInfo.Bindaddrs {
+		name := bindaddr.MethodName
+		t := transports.Get(name)
+		if t == nil {
+			_ = pt.SmethodError(name, "no such transport is supported")
+			continue
+		}
+
+		f, err := t.ServerFactory(stateDir, &bindaddr.Options)
+		if err != nil {
+			_ = pt.SmethodError(name, err.Error())
+			continue
+		}
+
+		ln, err := net.ListenTCP("tcp", bindaddr.Addr)
+		if err != nil {
+			_ = pt.SmethodError(name, err.Error())
+			continue
+		}
+
+		go func() {
+			_ = serverAcceptLoop(f, ln, &ptServerInfo)
+		}()
+		if args := f.Args(); args != nil {
+			pt.SmethodArgs(name, ln.Addr(), *args)
+		} else {
+			pt.SmethodArgs(name, ln.Addr(), nil)
+		}
+
+		log.Infof("%s - registered listener: %s", name, log.ElideAddr(ln.Addr().String()))
+
+		listeners = append(listeners, ln)
+		launched = true
+	}
+	pt.SmethodsDone()
+
+	return
+}
+
+
+func serverAcceptLoop(f base.ServerFactory, ln net.Listener, info *pt.ServerInfo) error {
+	defer ln.Close()
+	for {
+		conn, err := ln.Accept()
+		if err != nil {
+			if e, ok := err.(net.Error); ok && !e.Temporary() {
+				return err
+			}
+			continue
+		}
+		go serverHandler(f, conn, info)
+	}
+}
+
+
+func serverHandler(f base.ServerFactory, conn net.Conn, info *pt.ServerInfo) {
+	defer conn.Close()
+	termMon.onHandlerStart()
+	defer termMon.onHandlerFinish()
+
+	name := f.Transport().Name()
+	addrStr := log.ElideAddr(conn.RemoteAddr().String())
+	log.Infof("%s(%s) - new connection", name, addrStr)
+
+	// Instantiate the server transport method and handshake.
+	remote, err := f.WrapConn(conn)
+	if err != nil {
+		log.Warnf("%s(%s) - handshake failed: %s", name, addrStr, log.ElideError(err))
+		return
+	}
+
+	// Connect to the orport.
+	orConn, err := pt.DialOr(info, conn.RemoteAddr().String(), name)
+	if err != nil {
+		log.Errorf("%s(%s) - failed to connect to ORPort: %s", name, addrStr, log.ElideError(err))
+		return
+	}
+	defer orConn.Close()
+
+	if err = copyLoop(orConn, remote); err != nil {
+		log.Warnf("%s(%s) - closed connection: %s", name, addrStr, log.ElideError(err))
+	} else {
+		log.Infof("%s(%s) - closed connection", name, addrStr)
+	}
+}
+
+

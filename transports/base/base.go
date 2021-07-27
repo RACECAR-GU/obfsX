@@ -56,7 +56,7 @@ type ClientFactory interface {
 // ServerFactory is the interface that defines the factory for creating
 // plugable transport protocol server instances.  As the arguments are the
 // property of the factory, validation is done at factory creation time.
-type ServerFactory interface {
+type ProxyFactory interface {
 	// Transport returns the Transport instance that this ServerFactory belongs
 	// to.
 	Transport() Transport
@@ -83,5 +83,5 @@ type Transport interface {
 
 	// ServerFactory returns a ServerFactory instance for this transport
 	// protocol.  This can fail if the provided arguments are invalid.
-	ServerFactory(stateDir string, args *pt.Args) (ServerFactory, error)
+	ProxyFactory(stateDir string, args *pt.Args) (ProxyFactory, error)
 }
