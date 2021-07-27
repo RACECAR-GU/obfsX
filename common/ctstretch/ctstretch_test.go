@@ -43,8 +43,10 @@ func main() {
 func runTest(msgNBytes, inputBlockBits, outputBlockBits uint64, bias float64,
 	streamClient, streamServer cipher.Stream) {
 
-	clientTable16 := ctstretch.SampleBiasedStrings(outputBlockBits, 65536, bias, streamClient)
-	serverTable16 := ctstretch.InvertTable(ctstretch.SampleBiasedStrings(outputBlockBits, 65536, bias, streamServer))
+	// TODO: Catch these errors in the test
+	clientTable16, _ := SampleBiasedStrings(outputBlockBits, 65536, bias, streamClient)
+	serverTable16Raw, _ := SampleBiasedStrings(outputBlockBits, 65536, bias, streamServer)
+	serverTable16 := InvertTable(serverTable16Raw)
 
 	var outputBlockBits8 uint64
 	if inputBlockBits == 8 {
@@ -53,19 +55,21 @@ func runTest(msgNBytes, inputBlockBits, outputBlockBits uint64, bias float64,
 		outputBlockBits8 = outputBlockBits / 2
 	}
 
-	clientTable8 := ctstretch.SampleBiasedStrings(outputBlockBits8, 256, bias, streamClient)
-	serverTable8 := ctstretch.InvertTable(ctstretch.SampleBiasedStrings(outputBlockBits8, 256, bias, streamServer))
+	// TODO: Catch errors
+	clientTable8, _ := SampleBiasedStrings(outputBlockBits8, 256, bias, streamClient)
+	serverTable8Raw, _ := SampleBiasedStrings(outputBlockBits8, 256, bias, streamServer)
+	serverTable8 := InvertTable(serverTable8Raw)
 
 	msg := make([]byte, msgNBytes)
-	expandedNBytes := ctstretch.ExpandedNBytes(msgNBytes, inputBlockBits, outputBlockBits)
-	compressedNBytes := ctstretch.CompressedNBytes(expandedNBytes, outputBlockBits, inputBlockBits)
+	expandedNBytes := ExpandedNBytes(msgNBytes, inputBlockBits, outputBlockBits)
+	compressedNBytes := CompressedNBytes(expandedNBytes, outputBlockBits, inputBlockBits)
 
 	expanded := make([]byte, expandedNBytes)
 	rand.Read(msg)
 	compressed := make([]byte, compressedNBytes)
 
-	ctstretch.ExpandBytes(msg[:], expanded, inputBlockBits, outputBlockBits, clientTable16, clientTable8, streamClient)
-	ctstretch.CompressBytes(expanded, compressed, outputBlockBits, inputBlockBits, serverTable16, serverTable8, streamServer)
+	ExpandBytes(msg[:], expanded, inputBlockBits, outputBlockBits, clientTable16, clientTable8, streamClient)
+	CompressBytes(expanded, compressed, outputBlockBits, inputBlockBits, serverTable16, serverTable8, streamServer)
 
 	if bytes.Equal(msg, compressed) {
 		fmt.Println("Pass:", msgNBytes, inputBlockBits, outputBlockBits)

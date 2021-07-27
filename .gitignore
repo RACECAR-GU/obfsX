@@ -1,8 +1,7 @@
 *.swp
 *~
 
-obfs4proxy/obfs4proxy
-
-obfs4proxy/obfs5proxy
+obfsproxy/obfs4proxy
+obfsproxy/obfs5proxy
 
 bin

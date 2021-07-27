@@ -1,13 +1,12 @@
 module github.com/RACECAR-GU/obfsX
 
-require (
-	git.torproject.org/pluggable-transports/goptlib.git v1.0.0
-	github.com/dchest/siphash v1.2.1
-	gitlab.com/yawning/utls.git v0.0.11-1
-	golang.org/x/crypto v0.0.0-20190510104115-cbcb75029529
-	golang.org/x/exp v0.0.0-20191002040644-a1355ae1e2c3
-	golang.org/x/net v0.0.0-20190620200207-3b0461eec859
-	gonum.org/v1/gonum v0.0.0-20191009222026-5d5638e6749a
-)
+go 1.16
 
-go 1.13
+require (
+	git.torproject.org/pluggable-transports/goptlib.git v1.1.0
+	github.com/dchest/siphash v1.2.2
+	golang.org/x/crypto v0.0.0-20210711020723-a769d52b0f97
+	golang.org/x/exp v0.0.0-20210722180016-6781d3edade3
+	golang.org/x/net v0.0.0-20210726213435-c6fcb2dbf985
+	gonum.org/v1/gonum v0.9.3
+)
