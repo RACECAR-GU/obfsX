@@ -25,7 +25,7 @@ type Conn struct {
 	// Embeds a net.Conn and inherits its members.
 	net.Conn
 
-	bias	float64
+	bias		float64
 	mss_max	int
 	mss_dev	float64
 
@@ -253,13 +253,13 @@ func (encoder *riverrunEncoder) makePayload(pktType uint8, payload []byte) []byt
 type riverrunDecoder struct {
 	f.BaseDecoder
 
-	readStream cipher.Stream
+	readStream	cipher.Stream
 
-	revTable8 map[uint64]uint64
-	revTable16 map[uint64]uint64
+	revTable8	map[uint64]uint64
+	revTable16 	map[uint64]uint64
 
-	compressedBlockBits uint64
-	expandedBlockBits uint64
+	compressedBlockBits	uint64
+	expandedBlockBits	uint64
 }
 
 func newRiverrunDecoder(key []byte, readStream cipher.Stream, revTable8, revTable16 map[uint64]uint64, compressedBlockBits, expandedBlockBits uint64) *riverrunDecoder {

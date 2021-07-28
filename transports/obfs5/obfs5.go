@@ -39,7 +39,7 @@ import (
 	"github.com/RACECAR-GU/obfsX/transports/base"
 	"github.com/RACECAR-GU/obfsX/transports/obfs4"
 	// "github.com/RACECAR-GU/obfsX/transports/sharknado"
-	"github.com/RACECAR-GU/obfsX/transports/riverrun"
+	"github.com/RACECAR-GU/obfsX/transports/layers/riverrun"
 )
 
 const (
