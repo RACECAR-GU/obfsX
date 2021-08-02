@@ -15,8 +15,10 @@ type frag struct {
 }
 
 // rcv helpers
-func (em *Conn) decode(b []byte) ([]byte, uint32, bool, error) {
+func (em *Conn) decode(b []byte) (frag, error) {
 	buf := bytes.NewReader(b)
+
+	var msg frag
 
 	// stream id
 	var uuid [16]byte
@@ -34,6 +36,7 @@ func (em *Conn) decode(b []byte) ([]byte, uint32, bool, error) {
 	if err != nil {
 		return nil, 0, false, err
 	}
+	msg.index = rcv_i
 
 	// controls
 	var ctrl uint8
@@ -41,9 +44,8 @@ func (em *Conn) decode(b []byte) ([]byte, uint32, bool, error) {
 	if err != nil {
 		return nil, 0, false, err
 	}
-	last := false
 	if ctrl % 2 == 1 {
-		last = true
+		msg.last = true
 	}
 
 	// content length
@@ -53,13 +55,13 @@ func (em *Conn) decode(b []byte) ([]byte, uint32, bool, error) {
 		return nil, 0, false, err
 	}
 
-	content := make([]byte, size)
-	_, err := buf.read(content)
+	msg.content = make([]byte, size)
+	_, err := buf.read(msg.content)
 	if err != nil {
 		return nil, 0, false, err
 	}
 
-	return content, rcv_i, last, nil
+	return msg, nil
 
 }
 
@@ -91,6 +93,8 @@ func (em *Conn) rcv() ([]byte, error) {
 		go func() {
 			done <- c.Fetch(seqset, items,  messages)
 		}()
+
+		var buf bytes.Buffer
 
 		for recv := range messages {
 			parsed := recv.GetBody(section)
@@ -126,9 +130,7 @@ func (em *Conn) rcv() ([]byte, error) {
 						}
 						err = nil
 					}
-					em.defrag(msg)
-					// TODO: Make sure to defrag messages
-					// TODO: Combine these messages
+					buf.write(em.parse(msg))
 				}
 			}
 		}
@@ -138,7 +140,27 @@ func (em *Conn) rcv() ([]byte, error) {
 		}
 	}
 
-	return res, nil
+	return buf.bytes(), nil
+}
+
+func (em *Conn) parse(msg frag) []byte {
+	var buf bytes.Buffer
+	if frag.index < em.rcvd {
+		return nil
+	}
+	if frag.index == em.rcvd {
+		buf.write(frag.content)
+		if frag.last {
+			em.closed = true
+		}
+		next := em.parse(nextFrag)
+		buf.write(next)
+	}
+	if frag.index > em.rcvd {
+		em.storeFrag(frag) // TODO: This
+	}
+	return buf.bytes()
+	// TODO: If closed stop stuff
 }
 
 // TODO: Some server listener
