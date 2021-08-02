@@ -22,7 +22,7 @@ func (em *Conn) send(b []byte, offset int, s slot) (int, error) {
 		return 0, err
 	}
 
-	m, err := encrypt(to_send, []byte("raven_is_cool")) // TODO: Write encrypt // NEXT: Change up password
+	m, err := encrypt(to_send, []byte("raven_is_cool")) // NEXT: Change up password
 	if err != nil {
 		return err
 	}

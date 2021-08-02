@@ -119,7 +119,7 @@ func (em *Conn) rcv() ([]byte, error) {
 				switch p.Header.(type) {
 				case *mail.InlineHeader:
 					b, _ := ioutil.ReadAll(p.Body) // XXX: Should there be an err catch here?
-					m, err := decrypt(b, []byte("raven_is_cool")) // NEXT: Change up password// TODO: Decrypt
+					m, err := decrypt(b, []byte("raven_is_cool")) // NEXT: Change up password
 					if err != nil {
 						return nil, err
 					}
