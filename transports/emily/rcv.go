@@ -7,13 +7,17 @@ import (
 
 var ErrID = errors.New("rcv: Wrong conn id")
 
-func (em *Conn) rcv(b []byte, offset int, s slot) (int, error) {
-	
+type frag struct {
+	content	[]byte
+	index	uint32
+
+	last	bool
 }
-// send helpers
+
+// rcv helpers
 func (em *Conn) decode(b []byte) ([]byte, uint32, bool, error) {
 	buf := bytes.NewReader(b)
-	
+
 	// stream id
 	var uuid [16]byte
 	err := binary.read(buf, binary.LittleEndian, &uuid)
@@ -21,16 +25,16 @@ func (em *Conn) decode(b []byte) ([]byte, uint32, bool, error) {
 		return nil, 0, false, err
 	}
 	if uuid != em.uuid {
-		return nil, 0, false, ErrID // TODO: Catch this and continue
+		return nil, 0, false, ErrID
 	}
-	
+
 	// message number
 	var rcv_i uint32
 	err := binary.read(buf, binary.LittleEndian, &rcv_i)
 	if err != nil {
 		return nil, 0, false, err
 	}
-	
+
 	// controls
 	var ctrl uint8
 	err := binary.read(buf, binary.LittleEndian, &ctrl)
@@ -41,41 +45,40 @@ func (em *Conn) decode(b []byte) ([]byte, uint32, bool, error) {
 	if ctrl % 2 == 1 {
 		last = true
 	}
-	
+
 	// content length
 	var size uint32
 	err := binary.read(buf, binary.LittleEndian, &size)
 	if err != nil {
 		return nil, 0, false, err
 	}
-	
+
 	content := make([]byte, size)
 	_, err := buf.read(content)
 	if err != nil {
 		return nil, 0, false, err
 	}
-	
-	return content, rcv_i, last, nil
-	
-}
-// TODO: Read from inbox
 
-func (em *Conn) ([]byte, error) {
+	return content, rcv_i, last, nil
+
+}
+
+func (em *Conn) rcv() ([]byte, error) {
 	c, err := client.DialTLS(usr.host+":"+strconv.FormatUint(usr.imapPort, 10), nil) // XXX: Not configuring TLS Config
 	if err != nil {
 		return nil, err
 	}
-	
+
 	if err = c.Login(usr.uname, usr.password); err != nil {
 		return nil, err
 	}
-	
+
 	// XXX: Assumes inbox
 	mbox, err := c.Select("INBOX", false)
 	if err != nil {
 		return nil, err
 	}
-	
+
 	if mbox.Messages > usr.lastMessage {
 		seqset := new(imap.SeqSet)
 		seqset.AddRange(usr.lastMessage + 1, mbox.Messages)
@@ -111,19 +114,20 @@ func (em *Conn) ([]byte, error) {
 				switch p.Header.(type) {
 				case *mail.InlineHeader:
 					b, _ := ioutil.ReadAll(p.Body) // XXX: Should there be an err catch here?
-					m, err := encrypt(b, []byte("raven_is_cool")) // NEXT: Change up password// TODO: Decrypt
+					m, err := decrypt(b, []byte("raven_is_cool")) // NEXT: Change up password// TODO: Decrypt
 					if err != nil {
 						return nil, err
 					}
-					
-					content, rcv_i, last, err := em.decode(m)
+
+					msg, err := em.decode(m)
 					if err != nil {
 						if err != ErrID {
 							return nil, err
 						}
 						err = nil
 					}
-					
+					em.defrag(msg)
+					// TODO: Make sure to defrag messages
 					// TODO: Combine these messages
 				}
 			}
@@ -136,3 +140,5 @@ func (em *Conn) ([]byte, error) {
 
 	return res, nil
 }
+
+// TODO: Some server listener

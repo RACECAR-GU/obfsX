@@ -44,12 +44,12 @@ const (
 )
 
 type ClientArgs struct {
-	// TODO
+	// NEXT
 }
 
 // Implementation of the base.Transport interface.
 type Transport struct{
-	// TODO
+	// NEXT
 }
 // Name returns the name of the emily transport protocol.
 func (t *Transport) Name() string {
@@ -57,14 +57,6 @@ func (t *Transport) Name() string {
 }
 // ClientFactory: See ./ClientFactory.go
 // Serverfactory: See ./ServerFactory.go
-
-type Conn struct {
-	// TODO
-}
-
-func NewClientConn(conn net.Conn, args *ClientArgs) (c *Conn, err error) {
-	// TODO
-}
 
 func init() {
 }

@@ -21,5 +21,5 @@ func (sf *ServerFactory) Args() *pt.Args {
 }
 
 func (sf *ServerFactory) WrapConn(conn net.Conn) (net.Conn, error) {
-	// TODO
+	// NEXT
 }

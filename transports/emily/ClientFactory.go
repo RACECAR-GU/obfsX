@@ -16,10 +16,10 @@ func (cf *ClientFactory) Transport() base.Transport {
 }
 
 func (cf *ClientFactory) ParseArgs(args *pt.Args) (interface{}, error) {
-	// TODO
+	// NEXT
 }
 
 func (cf *ClientFactory) Dial(network, addr string, dialer net.Dialer, args interface{}) (net.Conn, error) {
-	// TODO
+	// NEXT
 	return conn, nil
 }

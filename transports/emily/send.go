@@ -3,7 +3,7 @@ package emily
 import (
 	"time"
 	"bytes"
-	
+
 	"net/smtp"
 )
 
@@ -21,24 +21,24 @@ func (em *Conn) send(b []byte, offset int, s slot) (int, error) {
 	if err != nil {
 		return 0, err
 	}
-	
+
 	m, err := encrypt(to_send, []byte("raven_is_cool")) // TODO: Write encrypt // NEXT: Change up password
 	if err != nil {
 		return err
 	}
-	
+
 	err := em.ail(m)
 	if err != nil {
 		return 0, err
 	}
 	em.sent += 1
-	
+
 	return send_content_len, nil
 }
 // send helpers
 func (em *Conn) encode(b []byte, offset int, s slot) ([]byte, int, error) {
 	buf := new(bytes.Buffer)
-	
+
 	max_content_len = s.size - 16 - 4 - 4 - 1
 	last := false
 	content_len = max_content_len
