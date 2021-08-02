@@ -15,6 +15,7 @@ type frag struct {
 }
 
 // rcv helpers
+// ADDTEST
 func (em *Conn) decode(b []byte) (frag, error) {
 	buf := bytes.NewReader(b)
 
@@ -143,6 +144,7 @@ func (em *Conn) rcv() ([]byte, error) {
 	return buf.bytes(), nil
 }
 
+// ADDTEST
 func (em *Conn) parse(msg frag) []byte {
 	var buf bytes.Buffer
 	if frag.index < em.rcvd {
@@ -153,14 +155,29 @@ func (em *Conn) parse(msg frag) []byte {
 		if frag.last {
 			em.closed = true
 		}
-		next := em.parse(nextFrag)
-		buf.write(next)
+		if len(em.frags) > 0 {
+			nextFrag := em.frags[0]
+			em.frags = em.frags[1:]
+			next := em.parse(nextFrag)
+			buf.write(next)
+		}
 	}
 	if frag.index > em.rcvd {
-		em.storeFrag(frag) // TODO: This
+		em.storeFrag(frag)
 	}
 	return buf.bytes()
 	// TODO: If closed stop stuff
+}
+
+// ADDTEST
+func (em *Conn) storeFrag(f frag) {
+	for i, f_i := range em.frags {
+		if f_i.index > f.index {
+			em.frags = append(em.frags[:i], append([]frag{f},em.frags[i:]...)...)
+			return
+		}
+	}
+	append(em.frags, f)
 }
 
 // TODO: Some server listener

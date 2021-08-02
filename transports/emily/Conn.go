@@ -26,6 +26,10 @@ type Conn struct {
 	slots		[]slot
 	sent		uint32
 	rcvd		uint32
+	
+	frags		[]frag
+	
+	closed		bool
 }
 
 func NewConn(host string, smtpPort, imapPort uint64, uname, password string, rcvrs []string) (*Conn, error) {
