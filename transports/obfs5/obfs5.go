@@ -40,6 +40,7 @@ import (
 	"github.com/RACECAR-GU/obfsX/transports/obfs4"
 	// "github.com/RACECAR-GU/obfsX/transports/sharknado"
 	"github.com/RACECAR-GU/obfsX/transports/layers/riverrun"
+	"github.com/RACECAR-GU/obfsX/transports/layers/turbotunnel"
 )
 
 const (
@@ -167,8 +168,11 @@ func NewClientConn(conn net.Conn, args *ClientArgs) (c *Conn, err error) {
 	}
 	// outer.Conn = sharknado.NewConn(rr, outer.GetDummyTraffic, serverSeed)
 
-	c = new(Conn)
-	c.Conn = outer
+	o5 := new(Conn)
+	o5.Conn = outer
+	conns := new([]net.Conn)
+	append(conns, o5)
+	c = turbotunnel.NewConn(conns)
 	return
 }
 

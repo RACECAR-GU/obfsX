@@ -7,9 +7,9 @@ import (
 	"github.com/RACECAR-GU/obfsX/transports/base"
 
 	"git.torproject.org/pluggable-transports/goptlib.git"
-	
+
 	"git.torproject.org/pluggable-transports/snowflake.git/common/turbotunnel"
-	
+
 	sf "git.torproject.org/pluggable-transports/snowflake.git/client/lib"
 
 	"github.com/xtaci/smux"
@@ -28,6 +28,30 @@ type Conn struct {
 	mConns	managedConns
 }
 
+// Similar to SnowflakeCollector, but lacking Collect
+// Currently iterates through the full set of conns.
+// More complex situations could be done later.
+type managedConns struct {
+	conns []net.Conn
+	index uint
+}
+func newManagedConns(conns []net.Conn) *managedConns {
+	mc := new(managedConns)
+	mc.conns = conns
+	return mc
+}
+func (mc *managedConns) pop() *net.Conn {
+	next := mc.index
+	mc.index += 1
+	return mc.conns[next % len(mc.conns)]
+}
+func (mc *managedConns) Close() {
+	// NEXT: Return err if it should
+	for _, c := range mc.conns {
+		c.Close()
+	{
+}
+
 func (conn *Conn) Close() error {
 	log.Infof("tt: closing stream %v", conn.ID())
 	conn.Stream.Close()
@@ -36,7 +60,7 @@ func (conn *Conn) Close() error {
 	conn.pconn.Close()
 	log.Printf("tt: discarding finished session")
 	conn.sess.Close()
-	return nil //TODO: return errors if any of the above do
+	return nil //NEXT: return errors if any of the above do
 }
 
 func NewConn(conns []net.Conn) (*Conn, error) {
@@ -48,11 +72,11 @@ func NewConn(conns []net.Conn) (*Conn, error) {
 			cleanup[i]()
 		}
 	}()
-	
-	mConns := newManagedConns(conns) // TODO: Implement (see connectLoop in snowflake)
+
+	mConns := newManagedConns(conns)
 	cleanup = append(cleanup, func() {
 		mConns.Close()
-	}
+	})
 
 	// Create a new smux session
 	log.Printf("tt: starting a new session ---")
