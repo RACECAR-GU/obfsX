@@ -10,7 +10,7 @@ import (
 
 	"git.torproject.org/pluggable-transports/snowflake.git/common/turbotunnel"
 
-	sf "git.torproject.org/pluggable-transports/snowflake.git/client/lib"
+	snow "git.torproject.org/pluggable-transports/snowflake.git/client/lib"
 
 	"github.com/xtaci/smux"
 )
@@ -49,7 +49,7 @@ func (mc *managedConns) Close() {
 	// NEXT: Return err if it should
 	for _, c := range mc.conns {
 		c.Close()
-	{
+	}
 }
 
 func (conn *Conn) Close() error {
@@ -130,7 +130,7 @@ func newSession(conns managedConns) (net.PacketConn, *smux.Session, error) {
 		if err != nil {
 			return nil, err
 		}
-		return sf.NewEncapsulationPacketConn(dummyAddr{}, dummyAddr{}, conn), nil
+		return snow.NewEncapsulationPacketConn(dummyAddr{}, dummyAddr{}, conn), nil
 	}
 	pconn := turbotunnel.NewRedialPacketConn(dummyAddr{}, dummyAddr{}, dialContext)
 

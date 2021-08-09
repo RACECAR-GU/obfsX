@@ -28,6 +28,7 @@ import (
 const defaultRelayURL = "wss://snowflake.bamsoftware.com/"
 
 var relayURL string
+var sf base.ServerFactory
 
 func CopyLoop(c1 io.ReadWriteCloser, c2 io.ReadWriteCloser) {
 	var wg sync.WaitGroup
@@ -82,15 +83,60 @@ func datachannelHandler(conn *net.Conn, remoteAddr net.Addr) {
 	log.Printf("datachannelHandler ends")
 }
 
+func sf_setup() {
+	// Setting necessary ENV variables NEXT: Could remove these? (they're in goptlib)
+	os.Setenv("TOR_PT_MANAGED_TRANSPORT_VER", "1")
+	os.Setenv("TOR_PT_SERVER_TRANSPORTS", "obfs5")
+	os.Setenv("TOR_PT_STATE_LOCATION", "/log/obfs5")
+	os.Setenv("TOR_PT_ORPORT", "127.0.0.1:0000")
+	os.Setenv("TOR_PT_SERVER_BINDADDR", "obfs5-0.0.0.0:0000")
+
+	if err := transports.Init(); err != nil {
+		log.Fatalf(err)
+	}
+
+	ptServerInfo, err := pt.ServerSetup(transports.Transports())
+	if err != nil {
+		log.Fatalf(err)
+	}
+
+	var stateDir string
+
+	if stateDir, err = pt.MakeStateDir(); err != nil {
+		log.Fatalf("[ERROR]: No state directory: %s", err)
+	}
+
+	for _, bindaddr := range ptServerInfo.Bindaddrs {
+		name := bindaddr.MethodName
+		t := transports.Get(name)
+		if t == nil {
+			_ = pt.SmethodError(name, "no such transport is supported")
+			continue
+		}
+
+		f, err := t.ServerFactory(stateDir, &bindaddr.Options)
+		if err != nil {
+			_ = pt.SmethodError(name, err.Error())
+			continue
+		}
+		if sf != nil {
+			log.Errf("Too many pts initialized.")
+		}
+		sf = f
+	}
+}
+
 func main() {
 	var logFilename string
 	var unsafeLogging bool
 	var keepLocalAddresses bool
+	var port int
 
 	flag.StringVar(&relayURL, "relay", defaultRelayURL, "websocket relay URL")
 	flag.StringVar(&logFilename, "log", "", "log filename")
 	flag.BoolVar(&unsafeLogging, "unsafe-logging", false, "prevent logs from being scrubbed")
 	flag.BoolVar(&keepLocalAddresses, "keep-local-addresses", false, "keep local LAN address ICE candidates")
+	flag.IntVar(&port, "port", 6666, "listening port")
 	flag.Parse()
 
 	var logOutput io.Writer = os.Stderr
@@ -117,7 +163,26 @@ func main() {
 		log.Fatalf("invalid relay url: %s", err)
 	}
 
+	l, err := net.Listen("tcp", fmt.Sprintf(":%v", port)) // NEXT: Set the host?
+	if err != nil {
+		log.Fatalf("Failed listening: %s", err)
+	}
+	defer l.Close()
+
 	for {
-		// TODO Basically server accept loop, pass to datachanhandler
+		conn, err := l.Accept()
+		if err != nil {
+			log.Infof("Error accepting: ", err.Error())
+			continue
+		}
+
+		// Instantiate the server transport method and handshake.
+		remote, err := sf.WrapConn(conn)
+		if err != nil {
+			log.Warningf("handshake failed")
+			continue
+		}
+
+		go dataChannelHandler(remote, nil) // NEXT: replace nil with proper thing
 	}
 }
