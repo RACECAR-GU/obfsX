@@ -10,6 +10,7 @@ import (
 	"crypto/cipher"
 	"math/rand"
 	"encoding/binary"
+	"sync"
 	"github.com/RACECAR-GU/obfsX/common/drbg"
 	"github.com/RACECAR-GU/obfsX/common/log"
 	"github.com/RACECAR-GU/obfsX/common/ctstretch"
@@ -143,21 +144,28 @@ func Get_control_fn(seed *drbg.Seed) (func(string, string, syscall.RawConn) erro
 	}, nil
 }
 
-var cache8	map[string][]uint64
-var cache16	map[string][]uint64
+var cache8 map[string][]uint64
+var cache16 map[string][]uint64
+var mutex = &sync.Mutex{}
 
 func getTables(expandedBlockBits8 uint64, expandedBlockBits uint64, bias float64, key []byte, block cipher.Block, iv []byte) ([]uint64, []uint64, error) {
 
+	mutex.Lock()
 	if cache8 == nil {
 		cache8 = make(map[string][]uint64)
 	}
 	if cache16 == nil {
 		cache16 = make(map[string][]uint64)
 	}
+	mutex.Unlock()
 
+	mutex.Lock()
 	table8, ok := cache8[string(key)]
+	mutex.Unlock()
 	if ok {
+		mutex.Lock()
 		table16, ok := cache16[string(key)]
+		mutex.Unlock()
 		if ok {
 			log.Debugf("riverrun: using cached tables")
 			return table8, table16, nil
@@ -178,8 +186,10 @@ func getTables(expandedBlockBits8 uint64, expandedBlockBits uint64, bias float64
 	}
 	log.Debugf("riverrun: table16 prepped")
 
+	mutex.Lock()
 	cache8[string(key)] = table8
 	cache16[string(key)] = table16
+	mutex.Unlock()
 
 	return table8, table16, nil
 }
