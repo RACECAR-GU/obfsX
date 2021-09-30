@@ -133,10 +133,11 @@ func (nonce boxNonce) bytes(out *[nonceLength]byte) error {
 // ObfsEncoder is a frame encoder instance.
 type ObfsEncoder struct {
 	f.BaseEncoder
-	key   [keyLength]byte
-	nonce boxNonce
+	key            [keyLength]byte
+	nonce          boxNonce
 	PacketOverhead int
 }
+
 func (encoder *ObfsEncoder) payloadOverhead(_ int) int {
 	return secretbox.Overhead
 }
@@ -146,7 +147,6 @@ func (encoder *ObfsEncoder) processLength(length uint16) ([]byte, error) {
 	binary.BigEndian.PutUint16(lengthBytes[:], length)
 	return lengthBytes, nil
 }
-
 
 // NewObfsEncoder creates a new ObfsEncoder instance.  It must be supplied a slice
 // containing exactly KeyLength bytes of keying material.
@@ -199,17 +199,19 @@ func (encoder *ObfsEncoder) encode(frame, payload []byte) (n int, err error) {
 }
 
 type prngRegenFunc func(payload []byte) error
+
 // ObfsDecoder is a BaseDecoder instance.
 type ObfsDecoder struct {
 	f.BaseDecoder
 	key   [keyLength]byte
 	nonce boxNonce
 
-	nextNonce         [nonceLength]byte
+	nextNonce [nonceLength]byte
 
 	PacketOverhead int
-	PrngRegen prngRegenFunc
+	PrngRegen      prngRegenFunc
 }
+
 func (decoder *ObfsDecoder) payloadOverhead(_ int) int {
 	return secretbox.Overhead
 }
@@ -291,21 +293,20 @@ func (decoder *ObfsDecoder) parsePacket(decoded []byte, decLen int) error {
 	if int(payloadLen) > len(pkt)-decoder.PacketOverhead {
 		return f.InvalidPayloadLengthError(int(payloadLen))
 	}
-	payload := pkt[decoder.PacketOverhead : decoder.PacketOverhead + int(payloadLen)]
+	payload := pkt[decoder.PacketOverhead : decoder.PacketOverhead+int(payloadLen)]
 
 	switch pktType {
-		case PacketTypePayload:
-			if payloadLen > 0 {
-				decoder.ReceiveDecodedBuffer.Write(payload)
-			}
-		case PacketTypePrngSeed:
-			err := decoder.PrngRegen(payload)
-			if err != nil {
-				return err
-			}
-		default:
-			// Ignore unknown packet types.
+	case PacketTypePayload:
+		if payloadLen > 0 {
+			decoder.ReceiveDecodedBuffer.Write(payload)
+		}
+	case PacketTypePrngSeed:
+		err := decoder.PrngRegen(payload)
+		if err != nil {
+			return err
+		}
+	default:
+		// Ignore unknown packet types.
 	}
 	return nil
 }
-

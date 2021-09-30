@@ -35,8 +35,8 @@ import (
 	"fmt"
 	"hash"
 
-	"github.com/dchest/siphash"
 	"github.com/RACECAR-GU/obfsX/common/csrand"
+	"github.com/dchest/siphash"
 )
 
 // Size is the length of the HashDrbg output.

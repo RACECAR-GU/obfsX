@@ -261,20 +261,20 @@ func CompressBytes(src, dst []byte, inputBlockBits, outputBlockBits uint64, inve
 	// Previous call had 8 output bits, 32 input bits, 108 + 3 bytes
 	//									 1 output byte   4 input bytes
 
-	if float64(len(dst))/float64(srcNBytes) < float64(outputBlockBits) / float64(inputBlockBits) {
+	if float64(len(dst))/float64(srcNBytes) < float64(outputBlockBits)/float64(inputBlockBits) {
 		return fmt.Errorf("ctstretch/bit_manip: dst has insufficient size")
 	}
 
-	inputBlockBytes := inputBlockBits / 8 // 1: 8 2: 4
+	inputBlockBytes := inputBlockBits / 8   // 1: 8 2: 4
 	outputBlockBytes := outputBlockBits / 8 // 1: 2 2: 1
 
-	blocks := uint64(srcNBytes) / inputBlockBytes // 1: 134 2: 0
+	blocks := uint64(srcNBytes) / inputBlockBytes   // 1: 134 2: 0
 	if (uint64(srcNBytes) % inputBlockBytes) != 0 { // 1: True (=2) 2: True (=2)
 		if blocks == 0 { // 1: False // 2: True
 			return CompressBytes(src, dst, inputBlockBits/2, outputBlockBits/2, inversion16, inversion8, stream, tb)
 		}
 
-		endSrc := blocks * inputBlockBytes // 1072
+		endSrc := blocks * inputBlockBytes  // 1072
 		endDst := blocks * outputBlockBytes // 268
 		err := CompressBytes(src[0:endSrc], dst[0:endDst], inputBlockBits, outputBlockBits, inversion16, inversion8, stream, tb)
 		if err != nil {

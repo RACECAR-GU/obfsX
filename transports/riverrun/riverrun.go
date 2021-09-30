@@ -1,20 +1,20 @@
 package riverrun
 
 import (
-	"io"
-	"net"
-	"fmt"
 	"bytes"
-	"syscall"
 	"crypto/aes"
 	"crypto/cipher"
-	"math/rand"
 	"encoding/binary"
-	"sync"
-	"github.com/RACECAR-GU/obfsX/common/drbg"
-	"github.com/RACECAR-GU/obfsX/common/log"
+	"fmt"
 	"github.com/RACECAR-GU/obfsX/common/ctstretch"
+	"github.com/RACECAR-GU/obfsX/common/drbg"
 	f "github.com/RACECAR-GU/obfsX/common/framing"
+	"github.com/RACECAR-GU/obfsX/common/log"
+	"io"
+	"math/rand"
+	"net"
+	"sync"
+	"syscall"
 )
 
 const (
@@ -26,12 +26,12 @@ type Conn struct {
 	// Embeds a net.Conn and inherits its members.
 	net.Conn
 
-	bias	float64
-	mss_max	int
-	mss_dev	float64
+	bias    float64
+	mss_max int
+	mss_dev float64
 
-	Encoder	*riverrunEncoder
-	Decoder	*riverrunDecoder
+	Encoder *riverrunEncoder
+	Decoder *riverrunDecoder
 }
 
 func get_rng(seed *drbg.Seed) (*rand.Rand, error) {
@@ -47,7 +47,7 @@ func get_mss(seed *drbg.Seed) (int, error) {
 	if err != nil {
 		return 0, err
 	}
-	return int(rng.Float64() * float64(800)) + 600, nil
+	return int(rng.Float64()*float64(800)) + 600, nil
 }
 
 func NewConn(conn net.Conn, isServer bool, seed *drbg.Seed) (*Conn, error) {
@@ -63,19 +63,19 @@ func NewConn(conn net.Conn, isServer bool, seed *drbg.Seed) (*Conn, error) {
 
 	// FIXME: Input and output block bits are randomly selected from valid options,
 	//        there may be a more optimal selection methedology/initial subset
-	compressedBlockBits := uint64((rng.Intn(2)+1) * 8)
+	compressedBlockBits := uint64((rng.Intn(2) + 1) * 8)
 
 	var expandedBlockBits uint64
 	var expandedBlockBits8 uint64
 	if compressedBlockBits == 8 {
-		expandedBlockBits = uint64((rng.Intn(6)+3) * 8)
+		expandedBlockBits = uint64((rng.Intn(6) + 3) * 8)
 		expandedBlockBits8 = expandedBlockBits
 	} else {
-		expandedBlockBits = uint64((rng.Intn(3)+2) * 16)
+		expandedBlockBits = uint64((rng.Intn(3) + 2) * 16)
 		expandedBlockBits8 = expandedBlockBits / 2
 	}
 
-	bias := rng.Float64() * .2 + .1 // Targeting entropy of 4-7 based on observations
+	bias := rng.Float64()*.2 + .1 // Targeting entropy of 4-7 based on observations
 
 	log.Infof("rr: Set bias to %f, compressed block bits to %d, expanded block bits to %d", bias, compressedBlockBits, expandedBlockBits)
 
@@ -199,12 +199,13 @@ type riverrunEncoder struct {
 
 	writeStream cipher.Stream
 
-	table8 []uint64
+	table8  []uint64
 	table16 []uint64
 
 	compressedBlockBits uint64
-	expandedBlockBits uint64
+	expandedBlockBits   uint64
 }
+
 func (encoder *riverrunEncoder) payloadOverhead(payloadLen int) int {
 	return int(ctstretch.ExpandedNBytes(uint64(payloadLen), encoder.compressedBlockBits, encoder.expandedBlockBits)) - payloadLen
 }
@@ -216,7 +217,7 @@ func newRiverrunEncoder(key []byte, writeStream cipher.Stream, table8, table16 [
 	encoder := new(riverrunEncoder)
 
 	encoder.Drbg = f.GenDrbg(key[:])
-	encoder.MaxPacketPayloadLength = int(ctstretch.CompressedNBytes_floor(f.MaximumSegmentLength - ctstretch.ExpandedNBytes(uint64(f.LengthLength), compressedBlockBits, expandedBlockBits), expandedBlockBits, compressedBlockBits))
+	encoder.MaxPacketPayloadLength = int(ctstretch.CompressedNBytes_floor(f.MaximumSegmentLength-ctstretch.ExpandedNBytes(uint64(f.LengthLength), compressedBlockBits, expandedBlockBits), expandedBlockBits, compressedBlockBits))
 	encoder.LengthLength = int(ctstretch.ExpandedNBytes(uint64(f.LengthLength), compressedBlockBits, expandedBlockBits))
 	encoder.PayloadOverhead = encoder.payloadOverhead
 
@@ -266,11 +267,11 @@ type riverrunDecoder struct {
 
 	readStream cipher.Stream
 
-	revTable8 map[uint64]uint64
+	revTable8  map[uint64]uint64
 	revTable16 map[uint64]uint64
 
 	compressedBlockBits uint64
-	expandedBlockBits uint64
+	expandedBlockBits   uint64
 }
 
 func newRiverrunDecoder(key []byte, readStream cipher.Stream, revTable8, revTable16 map[uint64]uint64, compressedBlockBits, expandedBlockBits uint64) *riverrunDecoder {
@@ -318,12 +319,12 @@ func (decoder *riverrunDecoder) decodeLength(lengthBytes []byte) (uint16, error)
 
 func (decoder *riverrunDecoder) parsePacket(decoded []byte, decLen int) error {
 	/*
-	originalNBytes := binary.BigEndian.Uint16(decoded[:f.LengthLength]) // TODO: Ensure this is encoded
-	if int(originalNBytes) > decLen-decoder.PacketOverhead {
-		return f.InvalidPayloadLengthError(int(originalNBytes))
-	}
+		originalNBytes := binary.BigEndian.Uint16(decoded[:f.LengthLength]) // TODO: Ensure this is encoded
+		if int(originalNBytes) > decLen-decoder.PacketOverhead {
+			return f.InvalidPayloadLengthError(int(originalNBytes))
+		}
 	*/
-	decoder.ReceiveDecodedBuffer.Write(decoded[decoder.PacketOverhead : decLen])
+	decoder.ReceiveDecodedBuffer.Write(decoded[decoder.PacketOverhead:decLen])
 	return nil
 }
 
@@ -339,7 +340,7 @@ func (decoder *riverrunDecoder) decodePayload(frames *bytes.Buffer) ([]byte, err
 	decodedPayload := make([]byte, compressedNBytes)
 	err = decoder.compressBytes(frame[:frameLen], decodedPayload[:compressedNBytes])
 	if err != nil {
-		log.Debugf("Max payload length is %d", int(ctstretch.CompressedNBytes_floor(f.MaximumSegmentLength - ctstretch.ExpandedNBytes(uint64(f.LengthLength), decoder.compressedBlockBits, decoder.expandedBlockBits), decoder.expandedBlockBits, decoder.compressedBlockBits)))
+		log.Debugf("Max payload length is %d", int(ctstretch.CompressedNBytes_floor(f.MaximumSegmentLength-ctstretch.ExpandedNBytes(uint64(f.LengthLength), decoder.compressedBlockBits, decoder.expandedBlockBits), decoder.expandedBlockBits, decoder.compressedBlockBits)))
 		log.Debugf("CompressedNBytes: %d", compressedNBytes)
 		log.Debugf("Got payload of len %d", frameLen)
 		return nil, err
