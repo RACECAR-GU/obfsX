@@ -1,18 +1,15 @@
 package turbotunnel
 
 import (
-	"fmt"
 	"net"
-
-	"github.com/RACECAR-GU/obfsX/transports/base"
-
-	"git.torproject.org/pluggable-transports/goptlib.git"
 
 	"git.torproject.org/pluggable-transports/snowflake.git/common/turbotunnel"
 
 	snow "git.torproject.org/pluggable-transports/snowflake.git/client/lib"
 
 	"github.com/xtaci/smux"
+
+	"github.com/RACECAR-GU/obfsX/common/log"
 )
 
 type dummyAddr struct{}
@@ -25,7 +22,7 @@ type Conn struct {
 	*smux.Stream // This implements net.Conn
 	sess	*smux.Session
 	pconn	net.PacketConn
-	mConns	managedConns
+	mConns	*managedConns
 }
 
 // Similar to SnowflakeCollector, but lacking Collect
@@ -40,10 +37,10 @@ func newManagedConns(conns []net.Conn) *managedConns {
 	mc.conns = conns
 	return mc
 }
-func (mc *managedConns) pop() *net.Conn {
+func (mc *managedConns) pop() net.Conn {
 	next := mc.index
 	mc.index += 1
-	return mc.conns[next % len(mc.conns)]
+	return mc.conns[next % uint(len(mc.conns))]
 }
 func (mc *managedConns) Close() {
 	// NEXT: Return err if it should
@@ -58,7 +55,7 @@ func (conn *Conn) Close() error {
 	log.Infof("tt: closing underlying connections")
 	conn.mConns.Close()
 	conn.pconn.Close()
-	log.Printf("tt: discarding finished session")
+	log.Infof("tt: discarding finished session")
 	conn.sess.Close()
 	return nil //NEXT: return errors if any of the above do
 }
@@ -79,8 +76,8 @@ func NewConn(conns []net.Conn) (*Conn, error) {
 	})
 
 	// Create a new smux session
-	log.Printf("tt: starting a new session ---")
-	pconn, sess, err := newSession(conns)
+	log.Infof("tt: starting a new session ---")
+	pconn, sess, err := newSession(mConns)
 	if err != nil {
 		return nil, err
 	}
@@ -98,13 +95,13 @@ func NewConn(conns []net.Conn) (*Conn, error) {
 
 	// All good, clear the cleanup list.
 	cleanup = nil
-	return &Conn{Stream: stream, sess: sess, pconn: pconn, mConns: mConns}
+	return &Conn{Stream: stream, sess: sess, pconn: pconn, mConns: mConns}, nil
 }
 
 // newSession returns a new smux.Session and the net.PacketConn it is running
 // over. The net.PacketConn successively connects through Snowflake proxies
 // pulled from snowflakes.
-func newSession(conns managedConns) (net.PacketConn, *smux.Session, error) {
+func newSession(conns *managedConns) (net.PacketConn, *smux.Session, error) {
 	clientID := turbotunnel.NewClientID()
 
 	// We build a persistent KCP session on a sequence of ephemeral WebRTC
@@ -113,13 +110,13 @@ func newSession(conns managedConns) (net.PacketConn, *smux.Session, error) {
 	// connection, we use EncapsulationPacketConn to encode packets into a
 	// stream.
 	dialContext := func(ctx context.Context) (net.PacketConn, error) {
-		log.Printf("redialing on same connection")
+		log.Infof("redialing on same connection")
 		// Obtain an available WebRTC remote. May block.
-		conn := conns.Pop()
+		conn := conns.pop()
 		if conn == nil {
 			return nil, errors.New("handler: Received invalid conn")
 		}
-		log.Println("Handler: conn assigned")
+		log.Infof("Handler: conn assigned")
 		// Send the magic Turbo Tunnel token.
 		_, err := conn.Write(turbotunnel.Token[:])
 		if err != nil {
