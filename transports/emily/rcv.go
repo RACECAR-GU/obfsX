@@ -66,41 +66,86 @@ func (em *Conn) decode(b []byte) (frag, error) {
 
 }
 
-func (em *Conn) rcv() ([]byte, error) {
-	c, err := client.DialTLS(usr.host+":"+strconv.FormatUint(usr.imapPort, 10), nil) // XXX: Not configuring TLS Config
+func (usr *account) rcv() ([][]byte, error) {
+
+	var err error
+
+	imap_create_mu.Lock() // only allow one creation of an imap instance
+	if usr.imapClient == nil {
+		logDebug("creating new imap instance")
+		if usr.insecure_tls {
+			logWarning("using insecure TLS connection")
+			tlsconfig := &tls.Config{
+				InsecureSkipVerify: true,
+				ServerName:         usr.host,
+			}
+			usr.imapClient, err = client.DialTLS(usr.host+":"+strconv.FormatUint(usr.imapPort, 10), tlsconfig)
+		} else {
+			usr.imapClient, err = client.DialTLS(usr.host+":"+strconv.FormatUint(usr.imapPort, 10), nil)
+		}
+		if err != nil {
+			logError("imap.DialTLS error:", err)
+			imap_create_mu.Unlock()
+			return nil, err
+		}
+		if err = usr.imapClient.Login(usr.uname, usr.password); err != nil {
+			logError("cannot log in to IMAP server: using username ", usr.uname)
+			imap_create_mu.Unlock()
+			return nil, err
+		}
+	} else {
+		logDebug("using existing imap instance")
+	}
+	imap_create_mu.Unlock()
+
+	// only one check at a time
+	check_mu.Lock()
+	defer check_mu.Unlock()
+
+	mbox, err := usr.imapClient.Select("INBOX", false)
 	if err != nil {
 		return nil, err
 	}
+	logDebug("mailbox contains ", mbox.Messages, " messages")
 
-	if err = c.Login(usr.uname, usr.password); err != nil {
-		return nil, err
-	}
+	res := make([][]byte, 0) // hold the results
 
-	// XXX: Assumes inbox
-	mbox, err := c.Select("INBOX", false)
+	// fetch only the unread emails
+	criteria := imap.NewSearchCriteria()
+	criteria.WithoutFlags = []string{"\\Seen"}
+	uids, err := usr.imapClient.Search(criteria)
 	if err != nil {
-		return nil, err
+		logError(err)
 	}
-
-	if mbox.Messages > usr.lastMessage {
+	if len(uids) > 0 {
+		//uids = uids[0:1]
+		logDebug("grabbing new email with UID=", uids)
 		seqset := new(imap.SeqSet)
-		seqset.AddRange(usr.lastMessage + 1, mbox.Messages)
+		seqset.AddNum(uids...)
 
-		var section *imap.BodySectionName
+		var section imap.BodySectionName
 		items := []imap.FetchItem{section.FetchItem()}
 
-		messages := make(chan *imap.Message, 10)
+		messages := make(chan *imap.Message, 1)
 		done := make(chan error, 1)
 		go func() {
-			done <- c.Fetch(seqset, items,  messages)
+			done <- usr.imapClient.Fetch(seqset, items, messages)
 		}()
 
-		var buf bytes.Buffer
-
+		var parsed imap.Literal
 		for recv := range messages {
-			parsed := recv.GetBody(section)
+			for attempts := 0; attempts < 3; attempts++ {
+				parsed = recv.GetBody(&section)
+				if parsed == nil {
+					logWarning("IMAP server didn't return message body for msg with uid ", uids, ". Waiting a few ms and will try again.")
+					time.Sleep(time.Millisecond * 100)
+				} else {
+					break
+				}
+			}
 			if parsed == nil {
-				return nil, fmt.Errorf("Server didn't returned message body")
+				logDebug("IMAP server failed to get body for message:\n", recv)
+				return nil, fmt.Errorf("IMAP server didn't return message body")
 			}
 
 			mr, err := mail.CreateReader(parsed)
@@ -118,20 +163,23 @@ func (em *Conn) rcv() ([]byte, error) {
 
 				switch p.Header.(type) {
 				case *mail.InlineHeader:
-					b, _ := ioutil.ReadAll(p.Body) // XXX: Should there be an err catch here?
-					m, err := decrypt(b, []byte("raven_is_cool")) // NEXT: Change up password
-					if err != nil {
-						return nil, err
-					}
-
-					msg, err := em.decode(m)
-					if err != nil {
-						if err != ErrID {
+					b, _ := ioutil.ReadAll(p.Body)
+					d, err := decrypt(b, usr.keyring, usr.uname)
+					if d != nil {
+						r, err := usr.deChunk(d)
+						if err != nil {
 							return nil, err
 						}
-						err = nil
+						if r != nil {
+							res = append(res, r)
+						}
+					} else if err != nil {
+						if err == io.EOF {
+							continue
+						} else {
+							return nil, err
+						}
 					}
-					buf.write(em.parse(msg))
 				}
 			}
 		}
@@ -140,8 +188,8 @@ func (em *Conn) rcv() ([]byte, error) {
 			return nil, err
 		}
 	}
-
-	return buf.bytes(), nil
+	logDebug("rcv() returning with a decrypted message")
+	return res, nil
 }
 
 // ADDTEST
