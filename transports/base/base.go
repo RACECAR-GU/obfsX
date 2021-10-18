@@ -30,8 +30,8 @@
 package base // import "github.com/RACECAR-GU/obfsX/transports/base"
 
 import (
-	"net"
 	"git.torproject.org/pluggable-transports/goptlib.git"
+	"net"
 )
 
 // ClientFactory is the interface that defines the factory for creating

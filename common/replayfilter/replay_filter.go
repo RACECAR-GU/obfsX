@@ -38,8 +38,8 @@ import (
 	"sync"
 	"time"
 
-	"github.com/dchest/siphash"
 	"github.com/RACECAR-GU/obfsX/common/csrand"
+	"github.com/dchest/siphash"
 )
 
 // maxFilterSize is the maximum capacity of a replay filter.  This value is

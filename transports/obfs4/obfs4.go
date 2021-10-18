@@ -44,13 +44,13 @@ import (
 
 	"git.torproject.org/pluggable-transports/goptlib.git"
 	"github.com/RACECAR-GU/obfsX/common/drbg"
+	f "github.com/RACECAR-GU/obfsX/common/framing"
 	"github.com/RACECAR-GU/obfsX/common/log"
 	"github.com/RACECAR-GU/obfsX/common/ntor"
 	"github.com/RACECAR-GU/obfsX/common/probdist"
 	"github.com/RACECAR-GU/obfsX/common/replayfilter"
 	"github.com/RACECAR-GU/obfsX/transports/base"
 	"github.com/RACECAR-GU/obfsX/transports/obfs4/framing"
-	f "github.com/RACECAR-GU/obfsX/common/framing"
 )
 
 const (
@@ -638,7 +638,6 @@ func (conn *Conn) GetDummyTraffic(n int) ([]byte, error) {
 	//			 This would involve making MakePayload a function of the
 	//			 encoder - or creation of a MakePaddedPayload
 
-
 	// We're still busy with the handshake and haven't determined our shared
 	// secret yet.  We therefore cannot send dummy traffic just yet.
 	if !conn.connEstablished {
@@ -667,7 +666,6 @@ func (conn *Conn) GetDummyTraffic(n int) ([]byte, error) {
 	log.Debugf("Size of dummy traffic buffer: %d", frameBuf.Len())
 	return frameBuf.Bytes(), nil
 }
-
 
 func init() {
 	flag.BoolVar(&biasedDist, biasCmdArg, false, "Enable obfs4 using ScrambleSuit style table generation")
