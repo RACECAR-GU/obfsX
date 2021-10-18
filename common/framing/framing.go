@@ -1,23 +1,22 @@
-
 package framing
 
 import (
-  "io"
-  "fmt"
-  "errors"
-  "bytes"
-  "net"
-  "encoding/binary"
+	"bytes"
+	"encoding/binary"
+	"errors"
+	"fmt"
+	"io"
+	"net"
 
-  "github.com/RACECAR-GU/obfsX/common/drbg"
-  "github.com/RACECAR-GU/obfsX/common/csrand"
-  "github.com/RACECAR-GU/obfsX/common/log"
+	"github.com/RACECAR-GU/obfsX/common/csrand"
+	"github.com/RACECAR-GU/obfsX/common/drbg"
+	"github.com/RACECAR-GU/obfsX/common/log"
 )
 
 const (
 	// MaximumSegmentLength is the length of the largest possible segment
 	// including overhead.
-	MaximumSegmentLength = 1500-52
+	MaximumSegmentLength = 1500 - 52
 
 	// LengthLength is the number of bytes used to represent length
 	LengthLength = 2
@@ -40,6 +39,7 @@ var ErrTagMismatch = errors.New("framing: Poly1305 tag mismatch")
 // InvalidPayloadLengthError is the error returned when Encoder.Encode()
 // rejects the payload length.
 type InvalidPayloadLengthError int
+
 func (e InvalidPayloadLengthError) Error() string {
 	return fmt.Sprintf("framing: Invalid payload length: %d", int(e))
 }
@@ -47,6 +47,7 @@ func (e InvalidPayloadLengthError) Error() string {
 // InvalidPacketLengthError is the error returned when decodePacket detects a
 // invalid packet length/
 type InvalidPacketLengthError int
+
 func (e InvalidPacketLengthError) Error() string {
 	return fmt.Sprintf("packet: Invalid packet length: %d", int(e))
 }
@@ -58,16 +59,16 @@ type processLengthFunc func(length uint16) ([]byte, error)
 
 // BaseEncoder implements the core encoder vars and functions
 type BaseEncoder struct {
-	Drbg			*drbg.HashDrbg
-	MaxPacketPayloadLength	int
-	LengthLength		int
-	PayloadOverhead		overheadFunc
+	Drbg                   *drbg.HashDrbg
+	MaxPacketPayloadLength int
+	LengthLength           int
+	PayloadOverhead        overheadFunc
 
-	Encode			encodeFunc
-	ProcessLength		processLengthFunc
-	ChopPayload		chopPayloadFunc
+	Encode        encodeFunc
+	ProcessLength processLengthFunc
+	ChopPayload   chopPayloadFunc
 
-	Type  string
+	Type string
 }
 
 // TODO: Only do this for riverrun encoder
@@ -76,8 +77,8 @@ func (encoder *BaseEncoder) MakePacket(w io.Writer, payload []byte) error {
 	// Encode the packet in an AEAD frame.
 	var frame [MaximumSegmentLength]byte
 	payloadLen := len(payload)
-	payloadLenWithOverhead0 := payloadLen+encoder.PayloadOverhead(payloadLen)
-	if len(frame) - encoder.LengthLength < payloadLenWithOverhead0 {
+	payloadLenWithOverhead0 := payloadLen + encoder.PayloadOverhead(payloadLen)
+	if len(frame)-encoder.LengthLength < payloadLenWithOverhead0 {
 		return io.ErrShortBuffer
 	}
 	length := uint16(payloadLenWithOverhead0)
@@ -136,25 +137,25 @@ type decodePayloadfunc func(frames *bytes.Buffer) ([]byte, error)
 type parsePacketFunc func(decoded []byte, decLen int) error
 type cleanupfunc func() error
 type BaseDecoder struct {
-	Drbg			*drbg.HashDrbg
-	LengthLength		int
-	MinPayloadLength	int
-	PacketOverhead		int
-	MaxFramePayloadLength	int
+	Drbg                  *drbg.HashDrbg
+	LengthLength          int
+	MinPayloadLength      int
+	PacketOverhead        int
+	MaxFramePayloadLength int
 
-	NextLength		uint16
-	NextLengthInvalid	bool
+	NextLength        uint16
+	NextLengthInvalid bool
 
-	PayloadOverhead		overheadFunc
+	PayloadOverhead overheadFunc
 
-	DecodeLength		decodeLengthfunc
-	DecodePayload		decodePayloadfunc
-	ParsePacket		parsePacketFunc
-	Cleanup			cleanupfunc
+	DecodeLength  decodeLengthfunc
+	DecodePayload decodePayloadfunc
+	ParsePacket   parsePacketFunc
+	Cleanup       cleanupfunc
 
-	ReceiveBuffer		*bytes.Buffer
-	ReceiveDecodedBuffer	*bytes.Buffer
-	readBuffer		[]byte
+	ReceiveBuffer        *bytes.Buffer
+	ReceiveDecodedBuffer *bytes.Buffer
+	readBuffer           []byte
 }
 
 func (decoder *BaseDecoder) InitBuffers() {
@@ -174,7 +175,7 @@ func (decoder *BaseDecoder) GetFrame(frames *bytes.Buffer) (int, []byte, error) 
 }
 
 func (decoder *BaseDecoder) Read(b []byte, conn net.Conn) (n int, err error) {
-  // If there is no payload from the previous Read() calls, consume data off
+	// If there is no payload from the previous Read() calls, consume data off
 	// the network.  Not all data received is guaranteed to be usable payload,
 	// so do this in a loop till data is present or an error occurs.
 	for decoder.ReceiveDecodedBuffer.Len() == 0 {
@@ -265,7 +266,7 @@ func (decoder *BaseDecoder) Decode(data []byte, frames *bytes.Buffer) (int, erro
 		log.Debugf("length (raw): %d, length (mask): %d", length, lengthMask)
 		length ^= binary.BigEndian.Uint16(lengthMask)
 		log.Debugf("First nextLength: %d", length)
-		if MaximumSegmentLength - int(decoder.LengthLength) < int(length) || decoder.MinPayloadLength > int(length) {
+		if MaximumSegmentLength-int(decoder.LengthLength) < int(length) || decoder.MinPayloadLength > int(length) {
 			// Per "Plaintext Recovery Attacks Against SSH" by
 			// Martin R. Albrecht, Kenneth G. Paterson and Gaven J. Watson,
 			// there are a class of attacks againt protocols that use similar
@@ -278,7 +279,7 @@ func (decoder *BaseDecoder) Decode(data []byte, frames *bytes.Buffer) (int, erro
 			// paper.
 			log.Debugf("Bad length")
 			decoder.NextLengthInvalid = true
-			length = uint16(csrand.IntRange(decoder.MinPayloadLength, MaximumSegmentLength - int(decoder.LengthLength)))
+			length = uint16(csrand.IntRange(decoder.MinPayloadLength, MaximumSegmentLength-int(decoder.LengthLength)))
 		}
 		log.Debugf("Out nextLength: %d", length)
 		decoder.NextLength = length

@@ -34,10 +34,11 @@ import (
 	"fmt"
 	"net"
 
-	"git.torproject.org/pluggable-transports/goptlib.git"
+	pt "git.torproject.org/pluggable-transports/goptlib.git"
 	"github.com/RACECAR-GU/obfsX/common/drbg"
 	"github.com/RACECAR-GU/obfsX/transports/base"
 	"github.com/RACECAR-GU/obfsX/transports/obfs4"
+
 	// "github.com/RACECAR-GU/obfsX/transports/sharknado"
 	"github.com/RACECAR-GU/obfsX/transports/riverrun"
 )
@@ -57,7 +58,7 @@ type ClientArgs struct {
 }
 
 // Transport is the obfs5 implementation of the base.Transport interface.
-type Transport struct{
+type Transport struct {
 	*obfs4.Transport
 }
 

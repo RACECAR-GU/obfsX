@@ -31,8 +31,8 @@ import (
 	"encoding/binary"
 	"fmt"
 
-	"github.com/RACECAR-GU/obfsX/transports/obfs4/framing"
 	f "github.com/RACECAR-GU/obfsX/common/framing"
+	"github.com/RACECAR-GU/obfsX/transports/obfs4/framing"
 )
 
 const (
@@ -59,7 +59,7 @@ func MakePayload(pktType uint8, data []byte, padLen uint16) []byte {
 	//   uint16_t length   Length of the payload (Big Endian).
 	//   uint8_t[] payload Data payload.
 	//   uint8_t[] padding Padding.
-	payload := make([]byte, f.TypeLength + f.LengthLength + len(data) + int(padLen))
+	payload := make([]byte, f.TypeLength+f.LengthLength+len(data)+int(padLen))
 	payload[0] = pktType
 	binary.BigEndian.PutUint16(payload[f.TypeLength:], uint16(len(data)))
 	if len(data) > 0 {
