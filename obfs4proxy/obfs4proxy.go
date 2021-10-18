@@ -84,16 +84,14 @@ func clientSetup() (launched bool, listeners []net.Listener) {
 			continue
 		}
 
-		ln, err := net.Listen("tcp", socksAddr)
+		ln, err := pt.ListenSocks("tcp", socksAddr)
 		if err != nil {
 			_ = pt.CmethodError(name, err.Error())
 			continue
 		}
 
-		go func() {
-			_ = clientAcceptLoop(f, ln, ptClientProxy)
-		}()
-		pt.Cmethod(name, socks5.Version(), ln.Addr())
+		go clientAcceptLoop(f, ln, ptClientProxy)
+		pt.Cmethod(name, ln.Version(), ln.Addr())
 
 		log.Infof("%s - registered listener: %s", name, ln.Addr())
 
@@ -105,10 +103,10 @@ func clientSetup() (launched bool, listeners []net.Listener) {
 	return
 }
 
-func clientAcceptLoop(f base.ClientFactory, ln net.Listener, proxyURI *url.URL) error {
+func clientAcceptLoop(f base.ClientFactory, ln *pt.SocksListener, proxyURI *url.URL) error {
 	defer ln.Close()
 	for {
-		conn, err := ln.Accept()
+		conn, err := ln.AcceptSocks()
 		if err != nil {
 			if e, ok := err.(net.Error); ok && !e.Temporary() {
 				return err
@@ -119,39 +117,33 @@ func clientAcceptLoop(f base.ClientFactory, ln net.Listener, proxyURI *url.URL) 
 	}
 }
 
-func clientHandler(f base.ClientFactory, conn net.Conn, proxyURI *url.URL) {
+func clientHandler(f base.ClientFactory, conn pt.SocksConn, proxyURI *url.URL) {
 	defer conn.Close()
 	termMon.onHandlerStart()
 	defer termMon.onHandlerFinish()
 
 	name := f.Transport().Name()
 
-	// Read the client's SOCKS handshake.
-	socksReq, err := socks5.Handshake(conn)
-	if err != nil {
-		log.Errorf("%s - client failed socks handshake: %s", name, err)
-		return
-	}
-	addrStr := log.ElideAddr(socksReq.Target)
+	addrStr := log.ElideAddr(conn.Req.Target)
 
 	// Deal with arguments.
-	args, err := f.ParseArgs(&socksReq.Args)
+	args, err := f.ParseArgs(&conn.Req.Args)
 	if err != nil {
 		log.Errorf("%s(%s) - invalid arguments: %s", name, addrStr, err)
-		_ = socksReq.Reply(socks5.ReplyGeneralFailure)
+		conn.Reject()
 		return
 	}
 
 	// Obtain the proxy dialer if any, and create the outgoing TCP connection.
 	var dialer net.Dialer
-	remote, err := f.Dial("tcp", socksReq.Target, dialer, args)
+	remote, err := f.Dial("tcp", conn.Req.Target, dialer, args)
 	if err != nil {
 		log.Errorf("%s(%s) - outgoing connection failed: %s", name, addrStr, log.ElideError(err))
-		_ = socksReq.Reply(socks5.ErrorToReplyCode(err))
+		_ = conn.RejectReason(socks5.ErrorToReplyCode(err))
 		return
 	}
 	defer remote.Close()
-	err = socksReq.Reply(socks5.ReplySucceeded)
+	err = conn.Grant(&net.TCPAddr{IP: net.IPv4zero, Port: 0})
 	if err != nil {
 		log.Errorf("%s(%s) - SOCKS reply failed: %s", name, addrStr, log.ElideError(err))
 		return
