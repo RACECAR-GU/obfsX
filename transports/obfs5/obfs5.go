@@ -76,13 +76,13 @@ func (t *Transport) ClientFactory(stateDir string) (base.ClientFactory, error) {
 }
 
 // ServerFactory returns a new ServerFactory instance.
-func (t *Transport) ProxyFactory(stateDir string, args *pt.Args) (s base.ProxyFactory, err error) {
-	pf := new(ProxyFactory)
-	subpf, err := obfs4.NewProxyFactory(t, stateDir, args)
+func (t *Transport) ServerFactory(stateDir string, args *pt.Args) (s base.ServerFactory, err error) {
+	pf := new(ServerFactory)
+	subpf, err := obfs4.NewServerFactory(t, stateDir, args)
 	if err != nil {
 		return nil, err
 	}
-	pf.ProxyFactory = subpf
+	pf.ServerFactory = subpf
 
 	return pf, nil
 }
@@ -121,11 +121,11 @@ func (cf *ClientFactory) Dial(network, addr string, dialer net.Dialer, args inte
 	return conn, nil
 }
 
-type ProxyFactory struct {
-	*obfs4.ProxyFactory
+type ServerFactory struct {
+	*obfs4.ServerFactory
 }
 
-func (pf *ProxyFactory) WrapConn(conn net.Conn) (net.Conn, error) {
+func (pf *ServerFactory) WrapConn(conn net.Conn) (net.Conn, error) {
 	// Not much point in having a separate newServerConn routine when
 	// wrapping requires using values from the factory instance.
 
@@ -142,7 +142,7 @@ func (pf *ProxyFactory) WrapConn(conn net.Conn) (net.Conn, error) {
 		return nil, err
 	}
 
-	return pf.ProxyFactory.WrapConn(inner)
+	return pf.ServerFactory.WrapConn(inner)
 }
 
 type Conn struct {
@@ -182,6 +182,6 @@ func init() {
 }
 
 var _ base.ClientFactory = (*ClientFactory)(nil)
-var _ base.ProxyFactory = (*ProxyFactory)(nil)
+var _ base.ServerFactory = (*ServerFactory)(nil)
 var _ base.Transport = (*Transport)(nil)
 var _ net.Conn = (*Conn)(nil)

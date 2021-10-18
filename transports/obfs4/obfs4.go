@@ -106,7 +106,7 @@ func (t *Transport) ClientFactory(stateDir string) (base.ClientFactory, error) {
 	return cf, nil
 }
 
-func NewProxyFactory(t base.Transport, stateDir string, args *pt.Args) (*ProxyFactory, error) {
+func NewServerFactory(t base.Transport, stateDir string, args *pt.Args) (*ServerFactory, error) {
 	st, err := serverStateFromArgs(stateDir, args)
 	if err != nil {
 		return nil, err
@@ -140,13 +140,13 @@ func NewProxyFactory(t base.Transport, stateDir string, args *pt.Args) (*ProxyFa
 	}
 	rng := rand.New(drbg)
 
-	pf := &ProxyFactory{t, &ptArgs, st.nodeID, st.identityKey, st.drbgSeed, iatSeed, st.iatMode, filter, rng.Intn(maxCloseDelay)}
+	pf := &ServerFactory{t, &ptArgs, st.nodeID, st.identityKey, st.drbgSeed, iatSeed, st.iatMode, filter, rng.Intn(maxCloseDelay)}
 	return pf, nil
 }
 
 // ServerFactory returns a new ServerFactory instance.
-func (t *Transport) ProxyFactory(stateDir string, args *pt.Args) (base.ProxyFactory, error) {
-	return NewProxyFactory(t, stateDir, args)
+func (t *Transport) ServerFactory(stateDir string, args *pt.Args) (base.ServerFactory, error) {
+	return NewServerFactory(t, stateDir, args)
 }
 
 type ClientFactory struct {
@@ -234,7 +234,7 @@ func (cf *ClientFactory) Dial(network, addr string, dialer net.Dialer, args inte
 	return conn, nil
 }
 
-type ProxyFactory struct {
+type ServerFactory struct {
 	transport base.Transport
 	args      *pt.Args
 
@@ -248,15 +248,15 @@ type ProxyFactory struct {
 	closeDelay int
 }
 
-func (pf *ProxyFactory) Transport() base.Transport {
+func (pf *ServerFactory) Transport() base.Transport {
 	return pf.transport
 }
 
-func (pf *ProxyFactory) Args() *pt.Args {
+func (pf *ServerFactory) Args() *pt.Args {
 	return pf.args
 }
 
-func (pf *ProxyFactory) WrapConn(conn net.Conn) (net.Conn, error) {
+func (pf *ServerFactory) WrapConn(conn net.Conn) (net.Conn, error) {
 	// Not much point in having a separate newServerConn routine when
 	// wrapping requires using values from the factory instance.
 
@@ -401,7 +401,7 @@ func (conn *Conn) newDecoder(key []byte) {
 	conn.decoder = decoder
 }
 
-func (conn *Conn) serverHandshake(pf *ProxyFactory, sessionKey *ntor.Keypair) error {
+func (conn *Conn) serverHandshake(pf *ServerFactory, sessionKey *ntor.Keypair) error {
 	if !conn.isServer {
 		return fmt.Errorf("serverHandshake called on client connection")
 	}
@@ -582,7 +582,7 @@ func (conn *Conn) SetWriteDeadline(t time.Time) error {
 	return syscall.ENOTSUP
 }
 
-func (conn *Conn) closeAfterDelay(pf *ProxyFactory, startTime time.Time) {
+func (conn *Conn) closeAfterDelay(pf *ServerFactory, startTime time.Time) {
 	// I-it's not like I w-wanna handshake with you or anything.  B-b-baka!
 	defer conn.Conn.Close()
 
@@ -672,6 +672,6 @@ func init() {
 }
 
 var _ base.ClientFactory = (*ClientFactory)(nil)
-var _ base.ProxyFactory = (*ProxyFactory)(nil)
+var _ base.ServerFactory = (*ServerFactory)(nil)
 var _ base.Transport = (*Transport)(nil)
 var _ net.Conn = (*Conn)(nil)
