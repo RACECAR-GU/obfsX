@@ -1,28 +1,18 @@
 package main
 
 import (
-	"bytes"
-	"crypto/rand"
-	"encoding/base64"
 	"flag"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"log"
 	"net"
-	"net/http"
 	"net/url"
 	"os"
-	"strings"
 	"sync"
-	"time"
 
-	"git.torproject.org/pluggable-transports/snowflake.git/common/messages"
 	"git.torproject.org/pluggable-transports/snowflake.git/common/safelog"
-	"git.torproject.org/pluggable-transports/snowflake.git/common/util"
 	"git.torproject.org/pluggable-transports/snowflake.git/common/websocketconn"
 	"github.com/gorilla/websocket"
-	"github.com/pion/webrtc/v3"
 )
 
 const defaultRelayURL = "wss://snowflake.bamsoftware.com/"
