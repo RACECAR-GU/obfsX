@@ -61,9 +61,9 @@ func NewConn(conn net.Conn, isServer bool, seed *drbg.Seed) (*Conn, error) {
 		return nil, err
 	}
 
-	// FIXME: Input and output block bits are randomly selected from valid options,
-	//        there may be a more optimal selection methedology/initial subset
-	compressedBlockBits := uint64((rng.Intn(2) + 1) * 8)
+	// We select the minimal expansion factors
+	// The full range is commented out
+	compressedBlockBits := uint64(16) // uint64((rng.Intn(2) + 1) * 8)
 
 	var expandedBlockBits uint64
 	var expandedBlockBits8 uint64
@@ -71,7 +71,7 @@ func NewConn(conn net.Conn, isServer bool, seed *drbg.Seed) (*Conn, error) {
 		expandedBlockBits = uint64((rng.Intn(6) + 3) * 8)
 		expandedBlockBits8 = expandedBlockBits
 	} else {
-		expandedBlockBits = uint64((rng.Intn(3) + 2) * 16)
+		expandedBlockBits = 32 // uint64((rng.Intn(3) + 2) * 16)
 		expandedBlockBits8 = expandedBlockBits / 2
 	}
 
